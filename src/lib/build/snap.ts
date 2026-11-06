@@ -1,15 +1,11 @@
 import { getDef, isRoofKind, type PieceDef } from '../pieces/catalog';
-import {
-  GRID_MAX,
-  GRID_MIN,
-  MAX_Y,
-  alongDir,
-  perpDir,
-  pkey,
-  type PieceSpec,
-  type PlacedPiece
-} from './grid';
+import { GRID_MAX, GRID_MIN, MAX_Y, Q, alongDir, perpDir, type PieceSpec, type PlacedPiece } from './grid';
 import { BATTEN_F, findRoofs, roofOfPiece, gableUsedByRoof, type Roof } from './roof';
+import { footprintOverlap, localBoxes, worldBoxes, type WorldBox } from './volumes';
+
+// ---------------------------------------------------------------------------
+// Grid points (bounds, notch positions)
+// ---------------------------------------------------------------------------
 
 /** A grid point occupied by a piece; `notch` = a notch is cut there. */
 export interface Occ {
@@ -25,85 +21,129 @@ export function notchesOf(def: PieceDef, side: number | undefined): number[] {
   return n;
 }
 
-/** Grid points occupied by a piece (used by the stacking solver). */
+/** Grid points covered by a piece. */
 export function pointsOf(p: PieceSpec): Occ[] {
   const def = getDef(p.type);
   const [ax, az] = alongDir(p.axis);
   const out: Occ[] = [];
-  switch (def.kind) {
-    case 'roof':
-    case 'ridge':
-    case 'chimney':
-    case 'batten':
-      return out;
-    case 'decor':
-      out.push({ x: p.ix, z: p.iz, notch: false });
-      return out;
-    case 'insert':
-      for (let k = 1; k < def.length; k++) out.push({ x: p.ix + ax * k, z: p.iz + az * k, notch: false });
-      return out;
-    case 'floor': {
-      const [px, pz] = perpDir(p.axis);
-      for (let k = 0; k <= def.length; k++)
-        for (let j = 0; j <= def.depth; j++)
-          out.push({ x: p.ix + ax * k + px * j, z: p.iz + az * k + pz * j, notch: false });
-      return out;
-    }
-    default: {
-      const notches = new Set(notchesOf(def, p.side));
-      for (let k = 0; k <= def.length; k++)
-        out.push({ x: p.ix + ax * k, z: p.iz + az * k, notch: notches.has(k) });
-      return out;
-    }
+  if (isRoofKind(def.kind)) return out;
+  if (def.kind === 'floor') {
+    const [px, pz] = perpDir(p.axis);
+    for (let k = 0; k <= def.length; k++)
+      for (let j = 0; j <= def.depth; j++)
+        out.push({ x: p.ix + ax * k + px * j, z: p.iz + az * k + pz * j, notch: false });
+    return out;
   }
+  const notches = new Set(notchesOf(def, p.side));
+  for (let k = 0; k <= def.length; k++) out.push({ x: p.ix + ax * k, z: p.iz + az * k, notch: notches.has(k) });
+  return out;
 }
 
-export interface IndexEntry {
-  piece: PieceSpec;
-  notch: boolean;
+// ---------------------------------------------------------------------------
+// Volume index: each piece = boxes (heads, notches, sections)
+// ---------------------------------------------------------------------------
+
+const CELL = 1;
+
+export interface PointIndex {
+  boxes: WorldBox[];
+  cells: Map<string, WorldBox[]>;
 }
-export type PointIndex = Map<string, IndexEntry[]>;
+
+function cellsOf(b: { x0: number; x1: number; z0: number; z1: number }): string[] {
+  const out: string[] = [];
+  for (let i = Math.floor(b.x0 / CELL); i <= Math.floor(b.x1 / CELL); i++)
+    for (let j = Math.floor(b.z0 / CELL); j <= Math.floor(b.z1 / CELL); j++) out.push(`${i},${j}`);
+  return out;
+}
 
 export function buildIndex(pieces: readonly PieceSpec[]): PointIndex {
-  const index: PointIndex = new Map();
+  const index: PointIndex = { boxes: [], cells: new Map() };
   for (const p of pieces) addToIndex(index, p);
   return index;
 }
 
 export function addToIndex(index: PointIndex, p: PieceSpec) {
-  for (const o of pointsOf(p)) {
-    const k = pkey(o.x, o.z);
-    const entry = { piece: p, notch: o.notch };
-    const list = index.get(k);
-    if (list) list.push(entry);
-    else index.set(k, [entry]);
+  for (const b of worldBoxes(p)) {
+    index.boxes.push(b);
+    for (const c of cellsOf(b)) {
+      const list = index.cells.get(c);
+      if (list) list.push(b);
+      else index.cells.set(c, [b]);
+    }
   }
 }
 
+/** Boxes of the index whose footprint overlaps `b`. */
+function near(index: PointIndex, b: { x0: number; x1: number; z0: number; z1: number }): WorldBox[] {
+  const seen = new Set<WorldBox>();
+  for (const c of cellsOf(b)) for (const e of index.cells.get(c) ?? []) if (footprintOverlap(e, b)) seen.add(e);
+  return [...seen];
+}
+
 /**
- * Height at which a piece comes to rest when dropped from above.
- * - parallel piece below: y ≥ its top
- * - crossing piece, with a notch on both pieces at that point: the notches fit
- *   into each other, y ≥ top − (its top notch + our bottom notch)
- * - crossing piece without a notch: it simply rests on top
+ * Height at which a piece comes to rest when dropped from above: for each of its boxes,
+ * it stops on the highest box below it. The notches being thinner boxes, two logs
+ * crossed at their notches sink into each other by 2 Q; heads or full sections
+ * rest on top.
  */
 export function dropHeight(index: PointIndex, spec: PieceSpec): number {
   const def = getDef(spec.type);
-  // Roof pieces take the height of their gables.
   if (isRoofKind(def.kind)) return spec.y;
   let y = 0;
-  for (const o of pointsOf(spec)) {
-    const list = index.get(pkey(o.x, o.z));
-    if (!list) continue;
-    for (const { piece: e, notch } of list) {
-      const ed = getDef(e.type);
-      const top = e.y + ed.h;
-      const credit = e.axis !== spec.axis && notch && o.notch ? ed.topNotch + def.bottomNotch : 0;
-      y = Math.max(y, top - credit);
-    }
+  for (const b of worldBoxes({ ...spec, y: 0 })) {
+    for (const e of near(index, b)) if (e.piece !== spec) y = Math.max(y, e.y1 - b.y0);
   }
   return y;
 }
+
+export interface Contact {
+  /** World center of the contact. */
+  x: number;
+  y: number;
+  z: number;
+  /** Two notches fitting into each other. */
+  lock: boolean;
+}
+
+/** Contacts of a piece placed at its height: what it rests on, and where the notches lock. */
+export function contactsOf(index: PointIndex, spec: PieceSpec): { supports: Contact[]; rect: [number, number, number, number] | null } {
+  const supports: Contact[] = [];
+  let rect: [number, number, number, number] | null = null;
+  const grow = (x0: number, x1: number, z0: number, z1: number) => {
+    rect = rect ? [Math.min(rect[0], x0), Math.max(rect[1], x1), Math.min(rect[2], z0), Math.max(rect[3], z1)] : [x0, x1, z0, z1];
+  };
+  for (const b of worldBoxes(spec)) {
+    if (b.y0 === 0) {
+      grow(b.x0, b.x1, b.z0, b.z1);
+      continue;
+    }
+    for (const e of near(index, b)) {
+      if (e.piece === spec || e.y1 !== b.y0) continue;
+      const x0 = Math.max(b.x0, e.x0);
+      const x1 = Math.min(b.x1, e.x1);
+      const z0 = Math.max(b.z0, e.z0);
+      const z1 = Math.min(b.z1, e.z1);
+      grow(x0, x1, z0, z1);
+      supports.push({ x: (x0 + x1) / 2, y: b.y0 * Q, z: (z0 + z1) / 2, lock: !!(b.notch && e.notch) });
+    }
+  }
+  return { supports, rect };
+}
+
+/** Is the piece balanced (its center above what supports it)? */
+export function isStable(index: PointIndex, spec: PieceSpec): boolean {
+  const { rect } = contactsOf(index, spec);
+  if (!rect) return false;
+  const boxes = worldBoxes(spec);
+  const cx = (Math.min(...boxes.map((b) => b.x0)) + Math.max(...boxes.map((b) => b.x1))) / 2;
+  const cz = (Math.min(...boxes.map((b) => b.z0)) + Math.max(...boxes.map((b) => b.z1))) / 2;
+  const tol = 0.02;
+  const [x0, x1, z0, z1] = rect;
+  return cx >= x0 - tol && cx <= x1 + tol && cz >= z0 - tol && cz <= z1 + tol;
+}
+
+// ---------------------------------------------------------------------------
 
 /** Normalizes a spec (optional fields) so specs can be compared. */
 export function normalize(spec: PieceSpec): PieceSpec {
@@ -189,7 +229,8 @@ export function validate(
       return { ok: false, reason: 'Off the table' };
   }
   if (spec.y + def.h > MAX_Y) return { ok: false, reason: 'Too high!' };
-  if (spec.y !== dropHeight(index, spec)) return { ok: false, reason: 'This piece would fall' };
+  if (spec.y !== dropHeight(index, spec)) return { ok: false, reason: 'No room for this piece here' };
+  if (!isStable(index, spec)) return { ok: false, reason: 'It would tip over: nothing holds it up on that side' };
   return { ok: true };
 }
 
@@ -199,11 +240,12 @@ export function canRemove(p: PlacedPiece, pieces: readonly PlacedPiece[], index:
   if (isRoofKind(def.kind)) return { ok: true };
   if (def.kind === 'gable' && gableUsedByRoof(p, pieces))
     return { ok: false, reason: 'Remove the roof first' };
-  for (const o of pointsOf(p)) {
-    const list = index.get(pkey(o.x, o.z));
-    if (!list) continue;
-    if (list.some((e) => e.piece !== p && e.piece.y > p.y))
-      return { ok: false, reason: 'Remove the pieces on top first' };
+  for (const b of worldBoxes(p)) {
+    for (const e of near(index, b)) {
+      if (e.piece !== p && e.y0 === b.y1) return { ok: false, reason: 'Remove the pieces on top first' };
+    }
   }
   return { ok: true };
 }
+
+export { localBoxes };

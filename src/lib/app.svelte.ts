@@ -1,7 +1,7 @@
 import { BuildStore, writeStorage } from './build/store.svelte';
 import type { PieceSpec } from './build/grid';
 import { canRemove, dropHeight, specKey } from './build/snap';
-import { candidateFromHit, evaluate, magnet, normRot, rotOf, type Ghost, type Hit } from './build/placement';
+import { candidateFromHit, evaluate, magnet, nearestValid, normRot, rotOf, type Ghost, type Hit } from './build/placement';
 import { getModel, MODELS } from './guide/models';
 import { getDef, isRoofKind } from './pieces/catalog';
 import { bonk, chime, fanfare, pop, setMuted } from './audio/sfx';
@@ -187,7 +187,13 @@ class AppState {
       return;
     }
     const cand = candidateFromHit(this.selected, this.rot, hit, view);
-    this.ghost = cand ? evaluate(cand, view) : null;
+    if (!cand) {
+      this.ghost = null;
+      return;
+    }
+    const g = evaluate(cand, view);
+    // the spot does not work: slide the ghost to the nearest spot that fits
+    this.ghost = g.ok ? g : (nearestValid(cand, view) ?? g);
   }
 
   refreshGhost() {

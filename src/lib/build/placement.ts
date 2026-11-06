@@ -1,6 +1,6 @@
 import { getDef, isRoofKind } from '../pieces/catalog';
 import { G, alongDir, perpDir, type PieceSpec, type Side } from './grid';
-import { dropHeight, validate, type PointIndex, type Validation } from './snap';
+import { contactsOf, dropHeight, validate, type Contact, type PointIndex, type Validation } from './snap';
 import { PLANK_W, nearestBatten, roofSpec, type Roof } from './roof';
 import { centerOf } from './transform';
 
@@ -23,6 +23,8 @@ export interface BuildView {
 
 export interface Ghost extends Validation {
   spec: PieceSpec;
+  /** Where the notches will lock into each other (visual cue). */
+  locks?: Contact[];
 }
 
 export function normRot(type: string, rot: number) {
@@ -74,7 +76,31 @@ export function candidateFromHit(type: string, rot: number, hit: Hit, view: Buil
 }
 
 export function evaluate(spec: PieceSpec, view: BuildView): Ghost {
-  return { spec, ...validate(spec, view.pieces, view.index, view.roofs) };
+  const v = validate(spec, view.pieces, view.index, view.roofs);
+  const locks = v.ok && !isRoofKind(getDef(spec.type).kind) ? contactsOf(view.index, spec).supports.filter((c) => c.lock) : [];
+  return { spec, ...v, locks };
+}
+
+/**
+ * Affordance: if the spot under the cursor does not work, look for the closest
+ * spot (one step around) where the piece fits, preferring the ones where its
+ * notches lock together.
+ */
+export function nearestValid(spec: PieceSpec, view: BuildView): Ghost | null {
+  if (isRoofKind(getDef(spec.type).kind)) return null;
+  let best: { g: Ghost; score: number } | null = null;
+  for (let dx = -1; dx <= 1; dx++)
+    for (let dz = -1; dz <= 1; dz++) {
+      if (!dx && !dz) continue;
+      const s: PieceSpec = { ...spec, ix: spec.ix + dx, iz: spec.iz + dz };
+      s.y = dropHeight(view.index, s);
+      const g = evaluate(s, view);
+      if (!g.ok) continue;
+      // prefer: notches locked, then closest, then lowest
+      const score = (g.locks?.length ? 0 : 10) + Math.hypot(dx, dz) + s.y * 0.01;
+      if (!best || score < best.score) best = { g, score };
+    }
+  return best?.g ?? null;
 }
 
 /** Guided mode: picks the expected piece closest to the hit point. */

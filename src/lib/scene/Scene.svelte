@@ -12,6 +12,7 @@
   import RoofPickers from './RoofPickers.svelte';
   import PlacementController from './PlacementController.svelte';
   import Celebration from './Celebration.svelte';
+  import LockMarkers from './LockMarkers.svelte';
 
   const { scene, renderer } = useThrelte();
 
@@ -80,6 +81,9 @@
 
 {#if app.ghost && app.tool === 'build'}
   <Ghost spec={app.ghost.spec} variant={app.ghost.ok ? 'ok' : 'bad'} />
+  {#if app.ghost.ok && app.ghost.locks?.length}
+    <LockMarkers locks={app.ghost.locks} />
+  {/if}
 {/if}
 
 {#if showRoofPickers}

@@ -88,6 +88,10 @@
   <div class="status" aria-live="polite">
     {#if app.tool === 'erase'}
       <span class="chip erase">Eraser: {coarse ? 'tap' : 'click'} a piece to remove it</span>
+    {:else if app.ghost && !app.ghost.ok && app.ghost.reason}
+      <span class="chip warn">✋ {app.ghost.reason}</span>
+    {:else if app.ghost?.locks?.length}
+      <span class="chip good">✓ The notches lock together</span>
     {:else if selectedName}
       <span class="chip">
         <b>{selectedName}</b>
@@ -221,6 +225,14 @@
   .chip.erase {
     color: #fff;
     background: var(--red);
+  }
+  .chip.warn {
+    color: #fff;
+    background: #e2683c;
+  }
+  .chip.good {
+    color: #fff;
+    background: var(--green);
   }
   .toast {
     position: absolute;

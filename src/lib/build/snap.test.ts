@@ -38,15 +38,40 @@ describe('stacking solver', () => {
     expect(drop([a], { type: 'medium', ix: 0, iz: 0, axis: 'z' })).toBe(2);
   });
 
-  it('crossed away from a notch, the log just rests on top (+4 Q)', () => {
+  it('crossed away from a notch of the lower log, only its own notch sinks in (+3 Q)', () => {
     const a: PieceSpec = { type: 'medium', ix: 0, iz: 0, y: 0, axis: 'x' };
-    expect(drop([a], { type: 'medium', ix: 2, iz: 0, axis: 'z' })).toBe(4);
+    expect(drop([a], { type: 'medium', ix: 2, iz: 0, axis: 'z' })).toBe(3);
+  });
+
+  it('the heads of a log are solid: they rest on what is under them', () => {
+    // Z wall on the table, small log just next to it: its head lands on the wall
+    const wall: PieceSpec = { type: 'medium', ix: 0, iz: 0, y: 0, axis: 'z' };
+    expect(drop([wall], { type: 'small', ix: 1, iz: 2, axis: 'x' })).toBe(4);
+  });
+
+  it('a piece held up by a single head tips over: placement refused', () => {
+    const wall: PieceSpec = { type: 'medium', ix: 0, iz: 0, y: 0, axis: 'z' };
+    const pieces = [wall];
+    const idx = buildIndex(pieces);
+    const spec: PieceSpec = { type: 'small', ix: 1, iz: 2, y: 0, axis: 'x' };
+    spec.y = dropHeight(idx, spec);
+    expect(validate(spec, pieces, idx).ok).toBe(false);
+  });
+
+  it('a log resting on two walls is stable', () => {
+    const pieces: PieceSpec[] = [
+      { type: 'medium', ix: 0, iz: 0, y: 0, axis: 'x' },
+      { type: 'medium', ix: 0, iz: 5, y: 0, axis: 'x' }
+    ];
+    const idx = buildIndex(pieces);
+    const spec: PieceSpec = { type: 'medium', ix: 0, iz: 0, y: 2, axis: 'z' };
+    expect(validate(spec, pieces, idx).ok).toBe(true);
   });
 
   it('the middle notch of the long log accepts a crossing log', () => {
     const a: PieceSpec = { type: 'long', ix: 0, iz: 0, y: 0, axis: 'x', side: 1 };
     expect(drop([a], { type: 'medium', ix: 3, iz: 0, axis: 'z' })).toBe(2);
-    expect(drop([a], { type: 'medium', ix: 5, iz: 0, axis: 'z' })).toBe(4);
+    expect(drop([a], { type: 'medium', ix: 5, iz: 0, axis: 'z' })).toBe(3);
   });
 
   it('a square of 4 medium walls closes up evenly', () => {
