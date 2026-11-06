@@ -40,6 +40,9 @@
       const pick = i.object.userData?.pick as Hit['kind'] | undefined;
       if (!pick) continue;
       if (pick === 'roof' && !wantRoof) continue;
+      // placing a roof element: see through the planks/beams/ridge caps already placed,
+      // otherwise they hide the roof pick surface (which is right on top of them)
+      if (pick === 'piece' && wantRoof && isRoofPiece(i.object.userData.uid)) continue;
       let normal: Hit['normal'];
       if (i.face) {
         tmpN.copy(i.face.normal).transformDirection(i.object.matrixWorld);
@@ -64,6 +67,11 @@
       if (pick === 'ground') return null;
     }
     return null;
+  }
+
+  function isRoofPiece(uid: number | undefined): boolean {
+    const p = uid == null ? undefined : app.build.pieces.find((q) => q.uid === uid);
+    return !!p && isRoofKind(getDef(p.type).kind);
   }
 
   const wantsRoof = () => !!app.selected && isRoofKind(getDef(app.selected).kind);
