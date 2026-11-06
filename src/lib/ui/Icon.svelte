@@ -15,7 +15,12 @@
     | 'trash'
     | 'magic'
     | 'forward'
-    | 'hand';
+    | 'hand'
+    | 'bomb'
+    | 'blast'
+    | 'tornado'
+    | 'quake'
+    | 'house';
   let { name, size = 20 }: { name: Name; size?: number } = $props();
 </script>
 
@@ -52,5 +57,15 @@
     <path d="m13 17 5-5-5-5" /><path d="m6 17 5-5-5-5" />
   {:else if name === 'hand'}
     <path d="M18 11V6a2 2 0 0 0-4 0v5" /><path d="M14 10V4a2 2 0 0 0-4 0v6" /><path d="M10 10.5V6a2 2 0 0 0-4 0v8" /><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.9-6-2.4l-3.6-3.6a2 2 0 0 1 2.8-2.8L7 15" />
+  {:else if name === 'bomb'}
+    <circle cx="10.5" cy="14" r="7" /><path d="m15.5 9 2.2-2.2" /><path d="M19.5 2.5v1.8" /><path d="M22 5.5h-1.8" /><path d="m21.3 3.2-1 1" />
+  {:else if name === 'blast'}
+    <path d="m12 2 2.2 5.4L20 6l-2.2 5.4L22 14l-5.7 1.2.7 5.8-5-3.4L7 21l.7-5.8L2 14l4.2-2.6L4 6l5.8 1.4z" />
+  {:else if name === 'tornado'}
+    <path d="M21 4H3" /><path d="M18 8H6" /><path d="M19 12H9" /><path d="M16 16h-6" /><path d="M11 20H9" />
+  {:else if name === 'quake'}
+    <path d="M2 12h3.5l2-6 3.5 12 3-9 2 5 1.5-2H22" />
+  {:else if name === 'house'}
+    <path d="M3 11 12 3.5 21 11" /><path d="M5.5 9v11h13V9" /><path d="M10 20v-5h4v5" />
   {/if}
 </svg>

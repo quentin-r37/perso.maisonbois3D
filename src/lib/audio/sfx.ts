@@ -1,14 +1,23 @@
-/** Sounds synthesized with Web Audio (no audio files). */
+/**
+ * Sounds synthesized with Web Audio (no audio files).
+ *
+ * Every sound goes through a small mixing bus: master → "muffle" low-pass (slow motion)
+ * → compressor (many sounds at once don't clip), plus a reverb send for the big ones.
+ */
 let ctx: AudioContext | null = null;
 let muted = false;
 let lastClack = 0;
+/** Offline rendering (dev checks): sounds are scheduled on this context instead. */
+let override: BaseAudioContext | null = null;
 
 export function setMuted(m: boolean) {
   muted = m;
 }
 
-function ac(): AudioContext | null {
-  if (typeof window === 'undefined') return null;
+/** Context to schedule a new sound on, or null (muted, no Web Audio). */
+export function ac(): BaseAudioContext | null {
+  if (override) return override;
+  if (muted || typeof window === 'undefined') return null;
   if (!ctx) {
     const AC = window.AudioContext ?? (window as any).webkitAudioContext;
     if (!AC) return null;
@@ -23,15 +32,113 @@ export function unlockAudio() {
   ac();
 }
 
-let noiseBuf: AudioBuffer | null = null;
-function noise(c: AudioContext) {
-  if (!noiseBuf) {
-    noiseBuf = c.createBuffer(1, c.sampleRate * 0.2, c.sampleRate);
-    const d = noiseBuf.getChannelData(0);
-    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+/** Renders the sounds scheduled by `play` into a buffer (to check levels in dev). */
+export async function renderOffline(seconds: number, play: () => void): Promise<AudioBuffer> {
+  const off = new OfflineAudioContext(2, Math.ceil(44100 * seconds), 44100);
+  override = off;
+  try {
+    play();
+  } finally {
+    override = null;
   }
-  return noiseBuf;
+  return off.startRendering();
 }
+
+// ---------------------------------------------------------------------------
+// Mixing bus
+
+export interface Bus {
+  /** Dry input. */
+  input: GainNode;
+  /** Reverb send. */
+  send: GainNode;
+  /** Low-pass on everything (opened wide, closed for the slow motion). */
+  muffle: BiquadFilterNode;
+}
+const buses = new WeakMap<BaseAudioContext, Bus>();
+
+export function bus(c: BaseAudioContext): Bus {
+  let b = buses.get(c);
+  if (b) return b;
+  const comp = c.createDynamicsCompressor();
+  comp.threshold.value = -14;
+  comp.knee.value = 10;
+  comp.ratio.value = 5;
+  comp.attack.value = 0.002;
+  comp.release.value = 0.22;
+  const muffle = c.createBiquadFilter();
+  muffle.type = 'lowpass';
+  muffle.frequency.value = 20000;
+  muffle.Q.value = 0.8;
+  const input = c.createGain();
+  input.connect(muffle).connect(comp).connect(c.destination);
+  const conv = c.createConvolver();
+  conv.buffer = impulse(c, 2.4);
+  const send = c.createGain();
+  const wet = c.createGain();
+  wet.gain.value = 0.4;
+  send.connect(conv).connect(wet).connect(muffle);
+  b = { input, send, muffle };
+  buses.set(c, b);
+  return b;
+}
+
+/** Reverb impulse: a few early reflections and a darkening tail (a room with wooden walls). */
+function impulse(c: BaseAudioContext, dur: number): AudioBuffer {
+  const n = Math.floor(c.sampleRate * dur);
+  const buf = c.createBuffer(2, n, c.sampleRate);
+  for (let ch = 0; ch < 2; ch++) {
+    const d = buf.getChannelData(ch);
+    let y = 0;
+    for (let i = 0; i < n; i++) {
+      const k = i / n;
+      // one-pole low-pass, closing over time: the tail gets darker
+      y += (0.85 - 0.75 * k) * (Math.random() * 2 - 1 - y);
+      d[i] = y * (1 - k) ** 2.6;
+    }
+    for (const ms of [7, 13, 19, 29, 41]) {
+      const i = Math.floor(((ms + ch * 2.3) / 1000) * c.sampleRate);
+      d[i] += (Math.random() < 0.5 ? -1 : 1) * 0.5 * (1 - ms / 60);
+    }
+  }
+  return buf;
+}
+
+// ---------------------------------------------------------------------------
+// Noise
+
+const whites = new WeakMap<BaseAudioContext, AudioBuffer>();
+const browns = new WeakMap<BaseAudioContext, AudioBuffer>();
+
+/** 2 s of white noise (long enough for its loop not to be heard). */
+export function white(c: BaseAudioContext): AudioBuffer {
+  let b = whites.get(c);
+  if (!b) {
+    b = c.createBuffer(1, c.sampleRate * 2, c.sampleRate);
+    const d = b.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    whites.set(c, b);
+  }
+  return b;
+}
+
+/** 2 s of brown noise: deep, smooth (rumbles, blasts). */
+export function brown(c: BaseAudioContext): AudioBuffer {
+  let b = browns.get(c);
+  if (!b) {
+    b = c.createBuffer(1, c.sampleRate * 2, c.sampleRate);
+    const d = b.getChannelData(0);
+    let y = 0;
+    for (let i = 0; i < d.length; i++) {
+      y = (y + 0.02 * (Math.random() * 2 - 1)) / 1.02;
+      d[i] = y * 3.5;
+    }
+    browns.set(c, b);
+  }
+  return b;
+}
+
+const noise = white;
 
 /** The "clack" of a piece of wood landing on another one. */
 export function clack(intensity = 1) {
@@ -42,7 +149,7 @@ export function clack(intensity = 1) {
   lastClack = now;
   const out = c.createGain();
   out.gain.value = 0.5 * intensity;
-  out.connect(c.destination);
+  out.connect(bus(c).input);
 
   // knock: short noise burst, resonant
   const src = c.createBufferSource();
@@ -73,12 +180,12 @@ export function clack(intensity = 1) {
 }
 
 /** Small marimba note. */
-function marimba(c: AudioContext, freq: number, t: number, vol = 0.25) {
+function marimba(c: BaseAudioContext, freq: number, t: number, vol = 0.25) {
   const g = c.createGain();
   g.gain.setValueAtTime(0, t);
   g.gain.linearRampToValueAtTime(vol, t + 0.005);
   g.gain.exponentialRampToValueAtTime(0.001, t + 0.6);
-  g.connect(c.destination);
+  g.connect(bus(c).input);
   for (const [mult, v] of [
     [1, 1],
     [4, 0.25],
@@ -121,7 +228,7 @@ export function bonk() {
   const g = c.createGain();
   g.gain.setValueAtTime(0.25, t);
   g.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
-  o.connect(g).connect(c.destination);
+  o.connect(g).connect(bus(c).input);
   o.start(t);
   o.stop(t + 0.16);
 }
@@ -137,7 +244,7 @@ export function pop() {
   const g = c.createGain();
   g.gain.setValueAtTime(0.2, t);
   g.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
-  o.connect(g).connect(c.destination);
+  o.connect(g).connect(bus(c).input);
   o.start(t);
   o.stop(t + 0.11);
 }

@@ -69,6 +69,15 @@
     return null;
   }
 
+  /** Demolition, bomb mode: point of the table (or of a piece) under the pointer. */
+  function bombPoint(clientX: number, clientY: number): [number, number, number] | null {
+    for (const i of raycast(clientX, clientY)) {
+      const pick = i.object.userData?.pick;
+      if (pick === 'ground' || pick === 'debris') return [i.point.x, i.point.y, i.point.z];
+    }
+    return null;
+  }
+
   function isRoofPiece(uid: number | undefined): boolean {
     const p = uid == null ? undefined : app.build.pieces.find((q) => q.uid === uid);
     return !!p && isRoofKind(getDef(p.type).kind);
@@ -95,7 +104,7 @@
     dragged = false;
     multi = false;
     longFired = false;
-    if (e.pointerType !== 'mouse') {
+    if (e.pointerType !== 'mouse' && !app.demo.active) {
       clearTimeout(longTimer);
       longTimer = setTimeout(() => {
         if (dragged || multi) return;
@@ -119,7 +128,7 @@
       }
       return;
     }
-    if (e.pointerType === 'mouse' && !app.pending) hover(e);
+    if (e.pointerType === 'mouse' && !app.pending && !app.demo.active) hover(e);
   }
 
   function onUp(e: PointerEvent) {
@@ -131,6 +140,13 @@
       return;
     }
     const isTouch = d.type !== 'mouse';
+    if (app.demo.active) {
+      if (isTouch || d.button === 0) {
+        const p = bombPoint(e.clientX, e.clientY);
+        if (p) app.dropBomb(p);
+      }
+      return;
+    }
     if (!isTouch && d.button === 2) {
       const uid = pieceAt(e.clientX, e.clientY);
       if (uid != null) app.erase(uid);
@@ -177,6 +193,10 @@
   }
 
   const onContext = (e: Event) => e.preventDefault();
+
+  $effect(() => {
+    dom.style.cursor = app.demo.phase === 'running' && app.demo.effect === 'bomb' ? 'crosshair' : '';
+  });
 
   $effect(() => {
     dom.addEventListener('pointerdown', onDown);

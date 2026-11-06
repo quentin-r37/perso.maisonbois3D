@@ -3,12 +3,24 @@
   import { sanitizeSpecs } from '../build/store.svelte';
   import { getDef } from '../pieces/catalog';
   import Icon from './Icon.svelte';
+  import { EFFECTS } from './demolition';
 
   let menuOpen = $state(false);
   let confirmClear = $state(false);
   let fileInput: HTMLInputElement;
 
-  const canRotate = $derived(!!app.selected && app.tool === 'build' && getDef(app.selected).rotations > 1);
+  const demo = $derived(app.demo.active);
+  const canRotate = $derived(!demo && !!app.selected && app.tool === 'build' && getDef(app.selected).rotations > 1);
+
+  function toggleDemolish() {
+    if (app.demo.active) {
+      app.rebuild();
+      return;
+    }
+    app.demo.menuOpen = !app.demo.menuOpen;
+    menuOpen = false;
+    if (app.demo.menuOpen) app.preloadDemolition();
+  }
 
   function exportFile() {
     const blob = new Blob([app.exportJSON()], { type: 'application/json' });
@@ -55,39 +67,66 @@
   </div>
 
   <div class="seg" role="tablist" aria-label="Mode">
-    <button role="tab" aria-selected={app.mode === 'libre'} class:on={app.mode === 'libre'} onclick={() => app.setMode('libre')}>
+    <button role="tab" aria-selected={app.mode === 'libre'} class:on={app.mode === 'libre'} disabled={demo} onclick={() => app.setMode('libre')}>
       Free build
     </button>
-    <button role="tab" aria-selected={app.mode === 'guide'} class:on={app.mode === 'guide'} onclick={() => app.setMode('guide')}>
+    <button role="tab" aria-selected={app.mode === 'guide'} class:on={app.mode === 'guide'} disabled={demo} onclick={() => app.setMode('guide')}>
       Booklet
     </button>
   </div>
 
   <div class="tools">
-    <button class="icon" title="Undo (Ctrl+Z)" disabled={!app.build.canUndo} onclick={() => app.undo()}><Icon name="undo" /></button>
-    <button class="icon" title="Redo (Ctrl+Y)" disabled={!app.build.canRedo} onclick={() => app.redo()}><Icon name="redo" /></button>
+    <button class="icon" title="Undo (Ctrl+Z)" disabled={demo || !app.build.canUndo} onclick={() => app.undo()}><Icon name="undo" /></button>
+    <button class="icon" title="Redo (Ctrl+Y)" disabled={demo || !app.build.canRedo} onclick={() => app.redo()}><Icon name="redo" /></button>
     <span class="sep"></span>
     <button class="icon" title="Rotate (R)" disabled={!canRotate} onclick={() => app.rotate()}><Icon name="rotate" /></button>
     <button
       class="icon"
       class:active={app.tool === 'erase'}
       title="Remove pieces (E)"
+      disabled={demo}
       onclick={() => app.setTool(app.tool === 'erase' ? 'build' : 'erase')}
     >
       <Icon name="eraser" />
     </button>
+    <div class="menu-wrap">
+      <button
+        class="icon boom"
+        class:active={demo}
+        title={demo ? 'Rebuild (Esc)' : 'Demolish! (X)'}
+        aria-expanded={app.demo.menuOpen}
+        disabled={app.demo.phase === 'rebuilding'}
+        onclick={toggleDemolish}
+        onpointerenter={() => app.preloadDemolition()}
+      >
+        <Icon name={demo ? 'house' : 'bomb'} />
+      </button>
+      {#if app.demo.menuOpen && !demo}
+        <div class="menu demolish" role="menu">
+          {#each EFFECTS as e, i (e.id)}
+            <button role="menuitem" onclick={() => app.demolish(e.id)}>
+              <Icon name={e.icon} size={18} />
+              <span class="label"><b>{e.label}</b><small>{e.hint}</small></span>
+              <kbd>{i + 1}</kbd>
+            </button>
+          {/each}
+        </div>
+      {/if}
+    </div>
     <span class="sep"></span>
     <button class="icon" title={app.muted ? 'Turn sound on' : 'Mute'} onclick={() => app.toggleMute()}>
       <Icon name={app.muted ? 'mute' : 'sound'} />
     </button>
     <div class="menu-wrap">
-      <button class="icon" title="More" aria-expanded={menuOpen} onclick={() => (menuOpen = !menuOpen)}><Icon name="menu" /></button>
+      <button class="icon" title="More" aria-expanded={menuOpen} onclick={() => ((menuOpen = !menuOpen), (app.demo.menuOpen = false))}>
+        <Icon name="menu" />
+      </button>
       {#if menuOpen}
         <div class="menu" role="menu">
           <button role="menuitem" onclick={() => ((app.helpOpen = true), (menuOpen = false))}><Icon name="help" size={18} /> Help</button>
-          <button role="menuitem" onclick={exportFile}><Icon name="download" size={18} /> Export (JSON)</button>
-          <button role="menuitem" onclick={() => fileInput.click()}><Icon name="upload" size={18} /> Import…</button>
-          <button role="menuitem" class="danger" onclick={clearAll}>
+          <button role="menuitem" disabled={demo} onclick={exportFile}><Icon name="download" size={18} /> Export (JSON)</button>
+          <button role="menuitem" disabled={demo} onclick={() => fileInput.click()}><Icon name="upload" size={18} /> Import…</button>
+          <button role="menuitem" class="danger" disabled={demo} onclick={clearAll}>
             <Icon name="trash" size={18} />
             {confirmClear ? 'Confirm?' : app.mode === 'guide' ? 'Start the model over' : 'Clear everything'}
           </button>
@@ -226,6 +265,46 @@
   }
   .menu .danger {
     color: var(--red);
+  }
+  .menu button:disabled {
+    opacity: 0.4;
+    cursor: default;
+    background: transparent;
+  }
+  .seg button:disabled {
+    cursor: default;
+    opacity: 0.6;
+  }
+  .icon.boom:hover:not(:disabled):not(.active) {
+    background: #ffe2d6;
+    color: #c2410c;
+  }
+  .menu.demolish {
+    min-width: 280px;
+  }
+  .menu.demolish button {
+    align-items: center;
+  }
+  .label {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    line-height: 1.2;
+  }
+  .label b {
+    font-weight: 600;
+  }
+  .label small {
+    color: var(--ink-soft);
+    font-size: 12.5px;
+  }
+  kbd {
+    font: inherit;
+    font-size: 12px;
+    color: var(--ink-soft);
+    border: 1.5px solid var(--line);
+    border-radius: 6px;
+    padding: 0 6px;
   }
 
   @media (max-width: 760px) {

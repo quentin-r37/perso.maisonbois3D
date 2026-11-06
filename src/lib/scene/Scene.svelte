@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { T, useThrelte } from '@threlte/core';
+  import { T, useTask, useThrelte } from '@threlte/core';
   import { OrbitControls } from '@threlte/extras';
-  import { Color, Fog, PMREMGenerator } from 'three';
+  import { Color, Fog, Group, PMREMGenerator } from 'three';
   import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
   import { app } from '../app.svelte';
   import { getDef, isRoofKind } from '../pieces/catalog';
@@ -13,6 +13,9 @@
   import PlacementController from './PlacementController.svelte';
   import Celebration from './Celebration.svelte';
   import LockMarkers from './LockMarkers.svelte';
+  import Demolition from './Demolition.svelte';
+  import DemolitionFx from './DemolitionFx.svelte';
+  import { fx } from '../destroy/fx';
 
   const { scene, renderer } = useThrelte();
 
@@ -26,11 +29,36 @@
 
   const build = $derived(app.build);
   const target = $derived<[number, number, number]>(app.mode === 'guide' ? app.guide.model.center : [1.5, 0.8, 1.5]);
-  const showRoofPickers = $derived(!!app.selected && app.tool === 'build' && isRoofKind(getDef(app.selected).kind));
+  const showRoofPickers = $derived(
+    !!app.selected && app.tool === 'build' && !app.demo.active && isRoofKind(getDef(app.selected).kind)
+  );
 
   const ghostKey = $derived(app.ghost ? specKey(app.ghost.spec) : '');
   const blueprints = $derived(
-    app.mode === 'guide' && !app.guide.done ? app.guide.remaining.filter((p) => specKey(p) !== ghostKey) : []
+    app.mode === 'guide' && !app.guide.done && !app.demo.active
+      ? app.guide.remaining.filter((p) => specKey(p) !== ghostKey)
+      : []
+  );
+
+  // screen shake: the whole world (table + pieces) jitters, the camera stays put
+  let world: Group | undefined = $state();
+  useTask(
+    (delta) => {
+      if (!world) return;
+      const s = fx.shake;
+      if (s < 0.002) {
+        if (world.position.lengthSq() || world.rotation.z) {
+          world.position.set(0, 0, 0);
+          world.rotation.set(0, 0, 0);
+        }
+        return;
+      }
+      const r = () => Math.random() - 0.5;
+      world.position.set(r() * s * 0.28, r() * s * 0.14, r() * s * 0.28);
+      world.rotation.set(r() * s * 0.012, 0, r() * s * 0.012);
+      fx.shake = s * Math.exp(-Math.min(delta, 0.05) * 4.5);
+    },
+    { autoInvalidate: false }
   );
 </script>
 
@@ -69,17 +97,24 @@
 />
 <T.DirectionalLight position={[10, 6, 12]} intensity={0.5} color="#dfe8ff" />
 
-<Table />
+<T.Group bind:ref={world}>
+  <Table />
 
-{#each build.pieces as piece (piece.uid)}
-  <Piece {piece} animate={build.consumeFresh(piece.uid)} highlight={app.tool === 'erase' && app.hoverUid === piece.uid} />
-{/each}
+  {#if app.demo.active}
+    <Demolition pieces={app.demo.pieces} />
+    <DemolitionFx />
+  {:else}
+    {#each build.pieces as piece (piece.uid)}
+      <Piece {piece} animate={build.consumeFresh(piece.uid)} highlight={app.tool === 'erase' && app.hoverUid === piece.uid} />
+    {/each}
+  {/if}
+</T.Group>
 
 {#each blueprints as spec (specKey(spec))}
   <Ghost {spec} variant="blueprint" />
 {/each}
 
-{#if app.ghost && app.tool === 'build'}
+{#if app.ghost && app.tool === 'build' && !app.demo.active}
   <Ghost spec={app.ghost.spec} variant={app.ghost.ok ? 'ok' : 'bad'} />
   {#if app.ghost.ok && app.ghost.locks?.length}
     <LockMarkers locks={app.ghost.locks} />

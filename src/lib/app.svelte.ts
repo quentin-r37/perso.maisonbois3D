@@ -1,14 +1,38 @@
 import { BuildStore, sanitizeSpecs, writeStorage } from './build/store.svelte';
-import type { PieceSpec } from './build/grid';
+import type { PieceSpec, PlacedPiece } from './build/grid';
 import { canRemove, dropHeight, specKey } from './build/snap';
 import { candidateFromHit, evaluate, magnet, nearestValid, normRot, rotOf, type Ghost, type Hit } from './build/placement';
 import { DEFAULT_MODEL_ID, getModel, type Model } from './guide/models';
 import { getDef, isRoofKind } from './pieces/catalog';
 import { bonk, chime, fanfare, pop, setMuted } from './audio/sfx';
 import { axisSideToRot } from './build/grid';
+import { loadRapier } from './destroy/rapier';
 
 export type Mode = 'libre' | 'guide';
 export type Tool = 'build' | 'erase';
+export type DemoEffect = 'explosion' | 'tornado' | 'quake' | 'bomb';
+
+/** One demolition effect to fire (a new object each time, even for the same effect). */
+export interface DemoShot {
+  id: number;
+  effect: DemoEffect;
+  /** Bomb: where it goes off. */
+  point?: [number, number, number];
+}
+
+/**
+ * Demolition: purely visual. The pieces are copied, the copies are blown up by the
+ * physics engine, then "rebuilt" (rewound) — the build itself is never touched.
+ */
+class DemolitionState {
+  phase = $state<'idle' | 'running' | 'rebuilding'>('idle');
+  effect = $state<DemoEffect>('explosion');
+  /** Snapshot of the pieces being demolished. */
+  pieces = $state.raw<PlacedPiece[]>([]);
+  shot = $state.raw<DemoShot | null>(null);
+  menuOpen = $state(false);
+  active = $derived(this.phase !== 'idle');
+}
 
 function readJSON<T>(key: string, fallback: T): T {
   try {
@@ -88,6 +112,9 @@ class AppState {
 
   build = $derived(this.mode === 'libre' ? this.sandbox : this.guideBuild);
 
+  demo = new DemolitionState();
+  #shotId = 0;
+
   #toastId = 0;
   #toastTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -112,7 +139,7 @@ class AppState {
   }
 
   setMode(mode: Mode) {
-    if (mode === this.mode) return;
+    if (mode === this.mode || this.demo.active) return;
     this.mode = mode;
     this.ghost = null;
     this.pending = false;
@@ -207,7 +234,7 @@ class AppState {
   placeGhost(): boolean {
     const g = this.ghost;
     this.pending = false;
-    if (!g) return false;
+    if (!g || this.demo.active) return false;
     if (!g.ok) {
       bonk();
       if (g.reason) this.notify(g.reason, 'warn');
@@ -259,6 +286,7 @@ class AppState {
 
   /** Removes a piece (if nothing rests on it). */
   erase(uid: number) {
+    if (this.demo.active) return;
     const build = this.build;
     const piece = build.pieces.find((p) => p.uid === uid);
     if (!piece) return;
@@ -278,6 +306,7 @@ class AppState {
   }
 
   undo() {
+    if (this.demo.active) return;
     const before = this.guide.stepIndex;
     this.build.undo();
     this.build.save();
@@ -286,6 +315,7 @@ class AppState {
   }
 
   redo() {
+    if (this.demo.active) return;
     const before = this.guide.stepIndex;
     this.build.redo();
     this.build.save();
@@ -294,6 +324,7 @@ class AppState {
   }
 
   clear() {
+    if (this.demo.active) return;
     this.build.clear();
     this.build.save();
     this.celebrating = false;
@@ -302,11 +333,65 @@ class AppState {
   }
 
   // -------------------------------------------------------------------------
+  // Demolition
+
+  /** Starts loading the physics engine (when the demolition menu opens). */
+  preloadDemolition() {
+    void loadRapier().catch(() => {});
+  }
+
+  /** Fires a demolition effect (starting the demolition if needed). */
+  demolish(effect: DemoEffect) {
+    const demo = this.demo;
+    demo.menuOpen = false;
+    if (demo.phase === 'rebuilding') return;
+    if (demo.phase === 'idle') {
+      if (!this.build.pieces.length) {
+        bonk();
+        this.notify('Build something first!', 'warn');
+        return;
+      }
+      demo.pieces = this.build.pieces;
+      this.ghost = null;
+      this.pending = false;
+      this.hoverUid = null;
+      this.celebrating = false;
+      this.tool = 'build';
+      demo.phase = 'running';
+      this.preloadDemolition();
+    }
+    demo.effect = effect;
+    // the bomb waits for a click
+    if (effect !== 'bomb') demo.shot = { id: ++this.#shotId, effect };
+  }
+
+  /** Bomb mode: a click on the scene. */
+  dropBomb(point: [number, number, number]) {
+    const demo = this.demo;
+    if (demo.phase !== 'running' || demo.effect !== 'bomb') return;
+    demo.shot = { id: ++this.#shotId, effect: 'bomb', point };
+  }
+
+  /** Puts every piece back in place (rewind animation, then the real pieces come back). */
+  rebuild() {
+    if (this.demo.phase === 'running') this.demo.phase = 'rebuilding';
+  }
+
+  /** End of the rewind. */
+  endDemolition() {
+    const demo = this.demo;
+    demo.phase = 'idle';
+    demo.pieces = [];
+    demo.shot = null;
+    this.refreshGhost();
+  }
+
+  // -------------------------------------------------------------------------
   // Guided mode
 
   /** "Show me": automatically places the next piece. */
   showMe() {
-    if (this.mode !== 'guide') return;
+    if (this.mode !== 'guide' || this.demo.active) return;
     const next = this.guide.remaining.find((p) => dropHeight(this.build.index, p) === p.y);
     if (!next) return;
     this.selected = next.type;
@@ -317,7 +402,7 @@ class AppState {
 
   /** Completes the whole current step. */
   finishStep() {
-    if (this.mode !== 'guide') return;
+    if (this.mode !== 'guide' || this.demo.active) return;
     const pieces = [...this.guide.remaining];
     pieces.forEach((p, i) =>
       setTimeout(() => {

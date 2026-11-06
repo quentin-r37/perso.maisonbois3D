@@ -12,6 +12,7 @@
   import { renderModelThumbnails, renderThumbnails } from './lib/pieces/thumbnails';
   import { MODELS } from './lib/guide/models';
   import { getDef } from './lib/pieces/catalog';
+  import { EFFECTS } from './lib/ui/demolition';
 
   const coarse = typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches;
 
@@ -34,6 +35,32 @@
     const t = e.target as HTMLElement;
     if (t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA')) return;
     const k = e.key.toLowerCase();
+    if (app.helpOpen) {
+      if (k === 'escape') app.helpOpen = false;
+      return;
+    }
+    // demolition: 1-4 fire an effect, Esc / X rebuild; the building shortcuts are off
+    const effect = EFFECTS[Number(k) - 1];
+    if (app.demo.active) {
+      if (k === 'escape' || k === 'x') app.rebuild();
+      else if (effect) app.demolish(effect.id);
+      return;
+    }
+    if (k === 'x') {
+      app.demo.menuOpen = !app.demo.menuOpen;
+      if (app.demo.menuOpen) app.preloadDemolition();
+      return;
+    }
+    if (app.demo.menuOpen) {
+      if (effect) {
+        app.demolish(effect.id);
+        return;
+      }
+      if (k === 'escape') {
+        app.demo.menuOpen = false;
+        return;
+      }
+    }
     if ((e.ctrlKey || e.metaKey) && k === 'z') {
       e.preventDefault();
       if (e.shiftKey) app.redo();
@@ -46,8 +73,7 @@
     } else if (k === 'e' || k === 'delete' || k === 'backspace') {
       app.setTool(app.tool === 'erase' ? 'build' : 'erase');
     } else if (k === 'escape') {
-      if (app.helpOpen) app.helpOpen = false;
-      else if (app.pending) app.pending = false;
+      if (app.pending) app.pending = false;
       else if (app.tool === 'erase') app.setTool('build');
       else app.select(null);
     } else if (k === 'enter' && app.pending) {
@@ -76,9 +102,29 @@
   </div>
 
   <Toolbar />
-  <PiecePalette />
-  {#if app.mode === 'guide'}
-    <GuidePanel />
+  {#if !app.demo.active}
+    <PiecePalette />
+    {#if app.mode === 'guide'}
+      <GuidePanel />
+    {/if}
+  {:else}
+    <div class="demobar" role="toolbar" aria-label="Demolition">
+      {#each EFFECTS as e, i (e.id)}
+        <button
+          class="fx"
+          class:on={app.demo.effect === e.id}
+          title="{e.hint} ({i + 1})"
+          disabled={app.demo.phase === 'rebuilding'}
+          onclick={() => app.demolish(e.id)}
+        >
+          <Icon name={e.icon} size={22} />
+          <span>{e.label}</span>
+        </button>
+      {/each}
+      <button class="place" disabled={app.demo.phase === 'rebuilding'} onclick={() => app.rebuild()}>
+        <Icon name="house" size={22} /> Rebuild
+      </button>
+    </div>
   {/if}
 
   {#if app.pending && app.ghost}
@@ -95,8 +141,14 @@
     </div>
   {/if}
 
-  <div class="status" aria-live="polite">
-    {#if app.tool === 'erase'}
+  <div class="status" class:above={app.demo.active} aria-live="polite">
+    {#if app.demo.phase === 'rebuilding'}
+      <span class="chip">Rebuilding…</span>
+    {:else if app.demo.active}
+      <span class="chip boom">
+        {#if app.demo.effect === 'bomb'}💣 {coarse ? 'Tap' : 'Click'} anywhere to drop a bomb{:else}Again? Pick an effect · <b>Rebuild</b> puts everything back{/if}
+      </span>
+    {:else if app.tool === 'erase'}
       <span class="chip erase">Eraser: {coarse ? 'tap' : 'click'} a piece to remove it</span>
     {:else if app.ghost && !app.ghost.ok && app.ghost.reason}
       <span class="chip warn">✋ {app.ghost.reason}</span>
@@ -138,6 +190,7 @@
               <li><b>Right click</b>: remove</li>
               <li><b>Drag</b>: turn the camera · <b>wheel</b>: zoom</li>
               <li><b>Ctrl+Z</b> / <b>Ctrl+Y</b>: undo / redo</li>
+              <li><b>X</b>: demolish! (then <b>Esc</b> to rebuild)</li>
             </ul>
           </div>
           <div>
@@ -211,6 +264,59 @@
   }
   .place.bad {
     background: #b9a998;
+  }
+  .demobar {
+    position: absolute;
+    left: 50%;
+    bottom: 22px;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px;
+    background: var(--paper);
+    border: 2px solid var(--wood-dark);
+    border-radius: 99px;
+    box-shadow: var(--shadow);
+    animation: rise 0.18s ease-out;
+    max-width: calc(100% - 20px);
+  }
+  .fx {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font: inherit;
+    font-weight: 500;
+    font-size: 15px;
+    height: 48px;
+    padding: 0 14px;
+    border-radius: 99px;
+    border: 0;
+    background: transparent;
+    color: var(--ink);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .fx:hover:not(:disabled) {
+    background: var(--card);
+  }
+  .fx.on {
+    background: #ffe2d6;
+    color: #c2410c;
+  }
+  .fx:disabled,
+  .demobar .place:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+  .demobar .place {
+    height: 48px;
+  }
+  .status.above {
+    bottom: 92px;
+  }
+  .chip.boom {
+    color: var(--ink);
   }
   .status {
     position: absolute;
@@ -350,6 +456,22 @@
     }
     .status {
       bottom: 178px;
+    }
+    .status.above {
+      bottom: 84px;
+    }
+    .demobar {
+      bottom: 14px;
+      gap: 2px;
+    }
+    .fx {
+      padding: 0 10px;
+    }
+    .fx span {
+      display: none;
+    }
+    .demobar .place {
+      padding: 0 16px;
     }
     .toast {
       top: 64px;
