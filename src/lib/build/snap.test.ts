@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { PieceSpec } from './grid';
+import { G, type PieceSpec } from './grid';
+import { worldBoxes } from './volumes';
 import { buildIndex, canRemove, dropHeight, pointsOf, specKey, validate } from './snap';
 import { findRoofs, roofSpec } from './roof';
 import { CATALOG } from '../pieces/catalog';
@@ -207,4 +208,48 @@ it('a balcony floor sits inside its frame: the front log runs in front of it, no
   floor.y = dropHeight(idx, floor);
   expect(floor.y).toBe(4);
   expect(validate(floor, pieces, idx).ok).toBe(true);
+});
+
+it('a floor can face the other way: same footprint, mirrored board', () => {
+  for (const axis of ['x', 'z'] as const) {
+    const a: PieceSpec = { type: 'floor', ix: 2, iz: 1, y: 4, axis };
+    const b: PieceSpec = { ...a, side: -1 };
+    expect(specKey(a)).not.toBe(specKey(b));
+    expect(pointsOf(b)).toEqual(pointsOf(a));
+    // the flipped boxes are the original ones turned 180° around the footprint center
+    const [cx, cz] = axis === 'x' ? [(2 + 2.5) * G, (1 + 1) * G] : [(2 - 1) * G, (1 + 2.5) * G];
+    const r = (n: number) => Math.round(n * 1000) / 1000;
+    const key = (w: { x0: number; x1: number; z0: number; z1: number }) => [r(w.x0), r(w.x1), r(w.z0), r(w.z1)].join();
+    const turned = worldBoxes(a).map((w) => key({ x0: 2 * cx - w.x1, x1: 2 * cx - w.x0, z0: 2 * cz - w.z1, z1: 2 * cz - w.z0 }));
+    expect(worldBoxes(b).map(key).sort()).toEqual(turned.sort());
+  }
+});
+
+it('two half floors cover a 5 × 5 room, meeting in the middle', () => {
+  // side walls on the table, front and back logs crossing them, small logs going up at the corners
+  const pieces: PieceSpec[] = [
+    { type: 'medium', ix: 0, iz: 0, y: 0, axis: 'z' },
+    { type: 'medium', ix: 5, iz: 0, y: 0, axis: 'z' },
+    { type: 'medium', ix: 0, iz: 0, y: 2, axis: 'x' },
+    { type: 'medium', ix: 0, iz: 5, y: 2, axis: 'x' },
+    { type: 'small', ix: 0, iz: 0, y: 4, axis: 'z' },
+    { type: 'small', ix: 5, iz: 0, y: 4, axis: 'z' },
+    { type: 'small', ix: 0, iz: 5, y: 4, axis: 'z' },
+    { type: 'small', ix: 5, iz: 5, y: 4, axis: 'z' }
+  ];
+  const front: PieceSpec = { type: 'floor-half', ix: 0, iz: 0, y: 0, axis: 'x' };
+  front.y = dropHeight(buildIndex(pieces), front);
+  expect(front.y).toBe(4);
+  expect(validate(front, pieces, buildIndex(pieces)).ok).toBe(true);
+
+  const withFront = [...pieces, front];
+  const back: PieceSpec = { type: 'floor-half', ix: 0, iz: 0, y: 0, axis: 'x', side: -1 };
+  back.y = dropHeight(buildIndex(withFront), back);
+  expect(back.y).toBe(4);
+  expect(validate(back, withFront, buildIndex(withFront)).ok).toBe(true);
+
+  // together they span the room from the front log to the back log
+  const boxes = [...worldBoxes(front), ...worldBoxes(back)];
+  expect(Math.min(...boxes.map((b) => b.z0))).toBeCloseTo(0.2);
+  expect(Math.max(...boxes.map((b) => b.z1))).toBeCloseTo(5 * G - 0.2);
 });

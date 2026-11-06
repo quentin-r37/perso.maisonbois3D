@@ -1,5 +1,5 @@
 import { getDef, isRoofKind } from '../pieces/catalog';
-import { FLOOR_MARGIN, G, LOG_W, OVERHANG, Q, floorNotchZ, type PieceSpec } from './grid';
+import { FLOOR_MARGIN, G, LOG_W, OVERHANG, Q, floorNotchZ, halfFloorEndZ, type PieceSpec } from './grid';
 import { GABLE_C, GABLE_T, gableHeight } from './roof';
 
 /**
@@ -77,8 +77,16 @@ export function localBoxes(type: string): LocalBox[] {
       // board minus its back-corner notches, so it can slide under the heads of the corner logs;
       // its front edge stops against the front log (it sits inside the frame, not on top of it)
       const L = def.length * G;
-      const zn = floorNotchZ(def.depth);
       const m = FLOOR_MARGIN;
+      if (type === 'floor-half') {
+        // notched front corners (around the heads of the corner logs), ends in the middle of the room
+        b = [
+          { x0: W2, x1: L - W2, z0: W2, z1: OVERHANG, y0: 0, y1: def.h },
+          { x0: -m, x1: L + m, z0: OVERHANG, z1: halfFloorEndZ(def.depth), y0: 0, y1: def.h }
+        ];
+        break;
+      }
+      const zn = floorNotchZ(def.depth);
       b = [
         { x0: -m, x1: L + m, z0: W2, z1: zn, y0: 0, y1: def.h },
         { x0: W2, x1: L - W2, z0: zn, z1: def.depth * G + m, y0: 0, y1: def.h }
@@ -105,6 +113,7 @@ export function worldBoxes(spec: PieceSpec): WorldBox[] {
   const ox = spec.ix * G;
   const oz = spec.iz * G;
   const L = def.length * G;
+  const D = def.depth * G;
   const flip = def.rotations === 4 && spec.side === -1;
   return localBoxes(spec.type).map((b) => {
     // facing -1: rotated 180° around the center of the piece
@@ -114,7 +123,7 @@ export function worldBoxes(spec: PieceSpec): WorldBox[] {
     let lz1 = b.z1;
     if (flip) {
       [lx0, lx1] = [L - b.x1, L - b.x0];
-      [lz0, lz1] = [-b.z1, -b.z0];
+      [lz0, lz1] = [D - b.z1, D - b.z0];
     }
     // axis z: local x → +z, local z → -x
     const w =

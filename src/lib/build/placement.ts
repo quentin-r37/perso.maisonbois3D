@@ -1,8 +1,8 @@
 import { getDef, isRoofKind } from '../pieces/catalog';
-import { G, alongDir, perpDir, type PieceSpec, type Side } from './grid';
+import { G, type PieceSpec, type Side } from './grid';
 import { contactsOf, dropHeight, validate, type Contact, type PointIndex, type Validation } from './snap';
 import { PLANK_W, RIDGE_DIV, nearestBatten, roofSpec, type Roof } from './roof';
-import { centerOf } from './transform';
+import { boxesCenter, centerOf } from './transform';
 
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 
@@ -67,12 +67,11 @@ export function candidateFromHit(type: string, rot: number, hit: Hit, view: Buil
     pz += hit.normal.z * 0.2;
   }
   const { axis, side } = rotOf(type, rot);
-  const [ax, az] = alongDir(axis);
-  const [qx, qz] = perpDir(axis);
-  const L = def.length;
-  const D = def.kind === 'floor' ? def.depth : 0;
-  const ix = Math.round(px / G - (ax * L) / 2 - (qx * D) / 2);
-  const iz = Math.round(pz / G - (az * L) / 2 - (qz * D) / 2);
+  // the piece itself (not its grid footprint) is centered under the cursor:
+  // a half floor goes in the half of the room being pointed at
+  const [cx, cz] = boxesCenter({ type, ix: 0, iz: 0, y: 0, axis, side });
+  const ix = Math.round((px - cx) / G);
+  const iz = Math.round((pz - cz) / G);
   const spec: PieceSpec = { type, ix, iz, y: 0, axis, side };
   spec.y = dropHeight(view.index, spec);
   return spec;

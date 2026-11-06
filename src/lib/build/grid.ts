@@ -25,6 +25,13 @@ export const FLOOR_MARGIN = 0.3;
  */
 export const floorNotchZ = (depth: number) => (depth + 1) * G - OVERHANG;
 
+/**
+ * Half floor: two of them cover a 5 × 5 room, meeting in the middle. Each one runs from
+ * the front log to the middle of the room, its front corners notched around the heads
+ * of the corner logs. Local z (from the front grid line) where it ends.
+ */
+export const halfFloorEndZ = (depth: number) => (depth * G) / 2;
+
 export const GRID_MIN = -16;
 export const GRID_MAX = 22;
 export const MAX_Y = 200;

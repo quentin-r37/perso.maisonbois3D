@@ -15,7 +15,7 @@ import {
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { getDef, type Paint } from './catalog';
-import { FLOOR_MARGIN, G, LOG_W, OVERHANG, Q, floorNotchZ, type PieceSpec } from '../build/grid';
+import { FLOOR_MARGIN, G, LOG_W, OVERHANG, Q, floorNotchZ, halfFloorEndZ, type PieceSpec } from '../build/grid';
 import {
   BATTEN_F,
   battenLength,
@@ -513,6 +513,26 @@ function floorParts(L: number, D: number): Part[] {
   return [extrude(s, Q, 'green', mat([0, Q / 2, 0], [Math.PI / 2, 0, 0]), 0.015)];
 }
 
+function halfFloorParts(L: number, D: number): Part[] {
+  // front half of a 5 × 5 room: notched front corners, straight edge in the middle of the room
+  // (same outline as its collision boxes in volumes.ts)
+  const w = LOG_W / 2;
+  const x0 = -FLOOR_MARGIN;
+  const x1 = L * G + FLOOR_MARGIN;
+  const zm = halfFloorEndZ(D);
+  const s = new Shape();
+  s.moveTo(w, w);
+  s.lineTo(L * G - w, w);
+  s.lineTo(L * G - w, OVERHANG);
+  s.lineTo(x1, OVERHANG);
+  s.lineTo(x1, zm);
+  s.lineTo(x0, zm);
+  s.lineTo(x0, OVERHANG);
+  s.lineTo(w, OVERHANG);
+  s.closePath();
+  return [extrude(s, Q, 'green', mat([0, Q / 2, 0], [Math.PI / 2, 0, 0]), 0.015)];
+}
+
 function treeParts(): Part[] {
   // a thick board cut into a fir tree, held up by a small crosswise foot
   const s = new Shape();
@@ -619,7 +639,7 @@ export function getGeometry(spec: GeoSpec): PieceGeometry {
       parts = chimneyParts(spec.param ?? 5);
       break;
     case 'floor':
-      parts = floorParts(def.length, def.depth);
+      parts = spec.type === 'floor-half' ? halfFloorParts(def.length, def.depth) : floorParts(def.length, def.depth);
       break;
     case 'decor':
       parts = spec.type === 'tree' ? treeParts() : figurineParts();

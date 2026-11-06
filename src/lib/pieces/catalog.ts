@@ -124,7 +124,21 @@ export const CATALOG: PieceDef[] = [
     depth: 2,
     h: 1,
     paint: 'green',
-    rotations: 2
+    // asymmetric board (front edge / notched back corners): it can face either way
+    rotations: 4
+  },
+  {
+    ...base,
+    id: 'floor-half',
+    name: 'Half floor',
+    kind: 'floor',
+    category: 'toit',
+    // footprint = the whole 5 × 5 room; the board covers its front half (the back half: rotate it)
+    length: 5,
+    depth: 5,
+    h: 1,
+    paint: 'green',
+    rotations: 4
   },
   { ...base, id: 'tree', name: 'Fir tree', kind: 'decor', category: 'deco', h: 16, paint: 'green', rotations: 4 },
   { ...base, id: 'figurine', name: 'Little character', kind: 'decor', category: 'deco', h: 10, paint: 'red', rotations: 4 }

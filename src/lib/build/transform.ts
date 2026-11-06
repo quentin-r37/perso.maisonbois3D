@@ -1,6 +1,7 @@
 import { getDef, isRoofKind } from '../pieces/catalog';
-import { G, Q, alongDir, type PieceSpec } from './grid';
+import { G, Q, alongDir, perpDir, type PieceSpec } from './grid';
 import { BATTEN_F, roofPieceCenter, slopePoint } from './roof';
+import { worldBoxes } from './volumes';
 
 export interface Transform {
   position: [number, number, number];
@@ -27,10 +28,12 @@ export function transformOf(spec: PieceSpec): Transform {
   let x = spec.ix * G;
   let z = spec.iz * G;
   if (spec.side === -1 && def.rotations === 4) {
+    // half-turn around the center of the footprint (floors: same rectangle, facing the other way)
     rotationY += Math.PI;
     const [ax, az] = alongDir(spec.axis);
-    x += ax * def.length * G;
-    z += az * def.length * G;
+    const [qx, qz] = perpDir(spec.axis);
+    x += (ax * def.length + qx * def.depth) * G;
+    z += (az * def.length + qz * def.depth) * G;
   }
   return { position: [x, y, z], rotationY };
 }
@@ -51,14 +54,17 @@ export function centerOf(spec: PieceSpec): [number, number, number] {
     const [x, y, z] = t.position;
     return spec.axis === 'x' ? [x + local, y + 1, z] : [x, y + 1, z + local];
   }
-  const [ax, az] = alongDir(spec.axis);
-  const half = (def.length / 2) * G;
-  const depth = def.kind === 'floor' ? (def.depth / 2) * G : 0;
-  const px = spec.axis === 'x' ? 0 : -1;
-  const pz = spec.axis === 'x' ? 1 : 0;
-  return [
-    spec.ix * G + ax * half + px * depth,
-    spec.y * Q + (def.h * Q) / 2,
-    spec.iz * G + az * half + pz * depth
-  ];
+  const [cx, cz] = boxesCenter(spec);
+  return [cx, spec.y * Q + (def.h * Q) / 2, cz];
+}
+
+/** Center (x, z) of the bounding box of a piece's volumes (the piece itself, not its grid footprint). */
+export function boxesCenter(spec: PieceSpec): [number, number] {
+  const b = worldBoxes(spec);
+  if (!b.length) return [spec.ix * G, spec.iz * G];
+  const x0 = Math.min(...b.map((e) => e.x0));
+  const x1 = Math.max(...b.map((e) => e.x1));
+  const z0 = Math.min(...b.map((e) => e.z0));
+  const z1 = Math.max(...b.map((e) => e.z1));
+  return [(x0 + x1) / 2, (z0 + z1) / 2];
 }
