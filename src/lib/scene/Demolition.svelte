@@ -8,7 +8,7 @@
   import { materialsFor } from '../pieces/materials';
   import { app, type DemoShot } from '../app.svelte';
   import { loadRapier } from '../destroy/rapier';
-  import { DemoWorld, type Debris, type Quat, type Vec3 } from '../destroy/world';
+  import { DemoWorld, type Impact, type Quat, type Vec3 } from '../destroy/world';
   import { explode, quake, tornado } from '../destroy/effects';
   import { emit, kick, resetFx, slowmo, timeScale } from '../destroy/fx';
   import { chime } from '../audio/sfx';
@@ -50,9 +50,14 @@
   const tmp = new Vector3();
   let stops: sfx.Stop[] = [];
 
+  /** Friction: pieces rubbing on each other, and on the table. */
+  const rubs = { wood: new sfx.Rub('wood'), table: new sfx.Rub('table') };
+
   function stopSounds() {
     for (const s of stops) s();
     stops = [];
+    rubs.wood.stop();
+    rubs.table.stop();
   }
 
   /** Stereo position (-1..1) and distance to the camera of a world point. */
@@ -63,13 +68,21 @@
     return { pan: Math.max(-1, Math.min(1, tmp.x)), dist };
   }
 
-  function onImpact(d: Debris, i: number, surface: 'wood' | 'table') {
+  function onImpact({ d, speed, mass, surface }: Impact) {
     const c = d.body.worldCom();
-    sfx.woodHit({ intensity: i, size: d.mass, surface, ...where(c.x, c.y, c.z) });
-    if (i > 0.4 && dustBudget > 0) {
+    sfx.impact({ speed, mass, surface, ...where(c.x, c.y, c.z) });
+    if (speed > 3 && dustBudget > 0) {
       dustBudget--;
-      const c = d.body.worldCom();
       emit({ kind: 'dust', p: [c.x, Math.max(0.05, c.y - 0.15), c.z], n: 2, spread: 0.25 });
+    }
+  }
+
+  function updateRubs() {
+    if (!world) return;
+    for (const k of ['wood', 'table'] as const) {
+      const s = world.slide[k];
+      const w = s.power > 0 ? where(s.x, s.y, s.z) : { pan: 0, dist: 10 };
+      rubs[k].update(s.power, s.speed, w.pan, w.dist);
     }
   }
 
@@ -232,6 +245,7 @@
     if (!world) return;
     dustBudget = Math.min(dustBudget + dt * 20, 4);
     world.step(dt * timeScale(dt));
+    updateRubs();
     world.debris.forEach((d, i) => {
       const g = groups[i];
       if (!g || !d.active) return;

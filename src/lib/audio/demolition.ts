@@ -104,7 +104,8 @@ function drive(c: BaseAudioContext, k: number): WaveShaperNode {
 // ---------------------------------------------------------------------------
 // Impacts
 
-let recent: number[] = [];
+/** Times of the last hits, per audio context (limiter). */
+const recentHits = new WeakMap<BaseAudioContext, number[]>();
 
 export interface ImpactSound {
   /** Speed at which the two met (m/s): 0.3 = a touch, 2 = a knock, 6+ = a heavy fall. */
@@ -128,7 +129,8 @@ export function impact({ speed, mass, surface = 'wood', pan = 0, dist = 10 }: Im
   const c = ac();
   if (!c) return;
   const now = c.currentTime;
-  recent = recent.filter((t) => now - t < 0.1);
+  const recent = (recentHits.get(c) ?? []).filter((t) => now - t < 0.1);
+  recentHits.set(c, recent);
   // no machine gun: at most 8 hits per 100 ms, the soft ones go first
   if (recent.length >= 8 || (recent.length >= 4 && speed < 1.5)) return;
   recent.push(now);
@@ -136,7 +138,7 @@ export function impact({ speed, mass, surface = 'wood', pan = 0, dist = 10 }: Im
   const t = now + Math.random() * 0.006;
   const hard = clamp(speed / 6, 0, 1);
   const heavy = clamp(Math.sqrt(mass / 0.6), 0.45, 1.5);
-  const loud = clamp(speed / 6, 0.02, 1.3) ** 0.85 * (0.55 + 0.45 * heavy);
+  const loud = clamp(speed / 6, 0.02, 1.3) ** 0.7 * (0.55 + 0.45 * heavy);
   const far = 1 / (1 + Math.max(0, dist - 7) * 0.06);
 
   // soft blows are dull: the whole voice goes through a low-pass that opens with the speed
@@ -238,7 +240,12 @@ export class Rub {
     body.frequency.value = this.table ? 300 : 900;
     body.Q.value = 3;
     body.gain.value = 6;
-    src.connect(band).connect(body).connect(grainGain);
+    // wood rubbing is a mid-range sound, not a hiss
+    const lp = c.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = this.table ? 1400 : 2400;
+    lp.Q.value = 0.5;
+    src.connect(band).connect(body).connect(lp).connect(grainGain);
 
     const t = c.currentTime;
     src.start(t, Math.random());
@@ -262,9 +269,9 @@ export class Rub {
     const t = c.currentTime;
     const far = 1 / (1 + Math.max(0, dist - 7) * 0.06);
     const v = clamp(speed / 3, 0, 1);
-    const level = (1 - Math.exp(-power / 10)) * far * (this.table ? 0.55 : 0.5);
+    const level = (1 - Math.exp(-power / 25)) * far * (this.table ? 0.4 : 0.35);
     this.#level!.gain.setTargetAtTime(level, t, level > this.#level!.gain.value ? 0.03 : 0.08);
-    this.#band!.frequency.setTargetAtTime(this.table ? 220 + 900 * v : 450 + 1900 * v, t, 0.06);
+    this.#band!.frequency.setTargetAtTime(this.table ? 180 + 600 * v : 320 + 1100 * v, t, 0.06);
     this.#pan!.pan.setTargetAtTime(clamp(pan * 0.8, -1, 1), t, 0.1);
     // faster sliding = faster grain
     this.#grain!.playbackRate.setTargetAtTime(0.4 + 2.2 * v, t, 0.1);
