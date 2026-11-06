@@ -1,6 +1,6 @@
 import { getDef, isRoofKind, type PieceDef } from '../pieces/catalog';
 import { GRID_MAX, GRID_MIN, MAX_Y, Q, alongDir, perpDir, type PieceSpec, type PlacedPiece } from './grid';
-import { BATTEN_F, findRoofs, roofOfPiece, gableUsedByRoof, type Roof } from './roof';
+import { BATTEN_F, RIDGE_DIV, findRoofs, roofOfPiece, gableUsedByRoof, type Roof } from './roof';
 import { footprintOverlap, localBoxes, worldBoxes, type WorldBox } from './volumes';
 
 // ---------------------------------------------------------------------------
@@ -180,24 +180,31 @@ function validateRoof(spec: PieceSpec, pieces: readonly PieceSpec[], roofs: Roof
   const n = normalize(spec);
   const slot = n.slot!;
   const onRoof = pieces.filter((p) => roofOfPiece(p) === rk).map(normalize);
-  const battens = (side: number) => onRoof.filter((p) => p.type === 'batten' && p.side === side).length;
+  const isBeam = (p: PieceSpec) => getDef(p.type).kind === 'batten';
+  const battens = (side: number) => onRoof.filter((p) => isBeam(p) && p.side === side).length;
   switch (def.kind) {
     case 'batten':
       if (slot < 0 || slot >= BATTEN_F.length) return { ok: false, reason: 'No notch here' };
-      if (onRoof.some((p) => p.type === 'batten' && p.side === n.side && p.slot === slot))
-        return { ok: false, reason: 'There is already a batten here' };
+      if (def.length !== roof.D)
+        return {
+          ok: false,
+          reason: def.length < roof.D ? 'This beam is too short for this roof: take the long one' : 'This beam is too long for this roof: take the short one'
+        };
+      if (onRoof.some((p) => isBeam(p) && p.side === n.side && p.slot === slot))
+        return { ok: false, reason: 'There is already a beam here' };
       return { ok: true };
     case 'roof':
       if (slot < 0 || slot >= roof.n) return { ok: false, reason: 'Outside the roof' };
       if (battens(n.side!) < BATTEN_F.length)
-        return { ok: false, reason: 'Place the battens on this slope first' };
+        return { ok: false, reason: 'Place the beams on this slope first' };
       if (onRoof.some((p) => p.type === 'roof-plank' && p.side === n.side && p.slot === slot))
         return { ok: false, reason: 'There is already a plank here' };
       return { ok: true };
     case 'ridge': {
-      if (slot < 0 || slot + def.length > roof.n * 4) return { ok: false, reason: 'Goes past the roof' };
+      if (slot < 0 || slot + def.length > roof.n * RIDGE_DIV) return { ok: false, reason: 'Goes past the roof' };
+      if (slot % RIDGE_DIV !== 0) return { ok: false, reason: 'A ridge cap stops on the joints between the plates' };
       if (battens(1) < BATTEN_F.length || battens(-1) < BATTEN_F.length)
-        return { ok: false, reason: 'Place the battens on both slopes first' };
+        return { ok: false, reason: 'Place the beams on both slopes first' };
       const overlap = onRoof.some((p) => {
         const d = getDef(p.type);
         if (d.kind !== 'ridge') return false;
@@ -207,7 +214,7 @@ function validateRoof(spec: PieceSpec, pieces: readonly PieceSpec[], roofs: Roof
       return { ok: true };
     }
     case 'chimney':
-      if (slot < 0 || slot + def.length > roof.n * 4) return { ok: false, reason: 'Goes past the roof' };
+      if (slot < 0 || slot + def.length > roof.n * RIDGE_DIV) return { ok: false, reason: 'Goes past the roof' };
       if (onRoof.some((p) => p.type === 'chimney' && Math.abs(p.slot! - slot) < def.length))
         return { ok: false, reason: 'There is already a chimney here' };
       return { ok: true };

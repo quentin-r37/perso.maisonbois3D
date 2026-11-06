@@ -1,28 +1,64 @@
 import { getDef } from '../pieces/catalog';
-import { G, type Axis, type PieceSpec, type Side } from './grid';
+import { G, LOG_W, type Axis, type PieceSpec, type Side } from './grid';
 
-/** Roof slope: 45°, the red ridge cap is a right angle. */
-export const SLOPE = 1;
+/** Roof slope (~37°, measured on the real gables). */
+export const SLOPE = 0.75;
 export const SLOPE_ANGLE = Math.atan(SLOPE);
-/** Width of the gable beyond the end notches (world). */
-export const GABLE_C = 0.6;
-export const GABLE_T = 0.14;
+/** Width of the gable beyond the end notches (world): the base is as long as a medium log. */
+export const GABLE_C = 0.55;
+/** The gables are as thick as the logs. */
+export const GABLE_T = LOG_W;
 /** Roof plank: fixed width (world), fixed thickness. */
-export const PLANK_W = 0.9;
-export const PLANK_T = 0.1;
+export const PLANK_W = 1.4;
+/**
+ * Positions along the ridge (ridge caps, chimney) are counted in half-plates.
+ * Long ridge cap = 2 plates, short = 1 plate: they stop on the plate joints.
+ */
+export const RIDGE_DIV = 2;
+export const PLANK_T = 0.14;
 /** Plank overhang below the gable edge, along the slope. */
 export const EAVE = 0.45;
 /** Overhang of the roof beyond each gable (world) used to compute the number of planks. */
 export const ROOF_OV = 0.6;
 
-/** Battens: light square slats that sit in the gable notches, the planks rest on them. */
-export const BATTEN = 0.16;
-export const BATTEN_NOTCH = 0.09;
-export const ROOF_LIFT = BATTEN - BATTEN_NOTCH;
-/** Notch positions along the slope (0 = eave, 1 = ridge): 2 per slope, 4 battens in total. */
-export const BATTEN_F = [0.3, 0.76];
-/** Fixed length of the battens (world). */
-export const BATTEN_LEN = 4.8;
+/**
+ * Beams (battens): orange, square section as thick as the logs. They sit in notches
+ * cut perpendicular to the slope (so they are tilted with the roof), 2 per slope,
+ * and stick out of the gable edge by BEAM_OUT: the grooves under the planks fit over them.
+ */
+export const BATTEN = LOG_W;
+/** Protrusion of the beams above the gable edge (perpendicular to the slope). */
+export const BEAM_OUT = 0.07;
+/** Depth of the notches in the gables. */
+export const BATTEN_NOTCH = BATTEN - BEAM_OUT;
+/**
+ * The roof plates have two grooves underneath, across their width, that fit over the beams:
+ * they lie directly on the gable edge.
+ */
+export const ROOF_LIFT = 0;
+export const PLANK_GROOVE = BEAM_OUT + 0.005;
+/** Position of the center of the notches along the slope (0 = eave, 1 = ridge). */
+export const BATTEN_F = [0.4, 0.76];
+/** Fixed length of the beams (world): they stick out just past the gables (5 G + one thickness). */
+export const BATTEN_LEN = 3.62;
+/** How far the beams stick out beyond the axis of the gables (world, total). */
+export const BATTEN_EXTRA = BATTEN_LEN - 5 * G;
+
+/** World length of a beam spanning gables D steps apart. */
+export function battenLength(D: number) {
+  return D * G + BATTEN_EXTRA;
+}
+
+/** Center (local gable coordinates) and tilt of beam `slot` on slope `side`. */
+export function battenPose(W: number, side: number, slot: number): { x: number; y: number; rotZ: number } {
+  const sx = side < 0 ? -1 : 1;
+  const [lx, ly] = slopePoint(W, BATTEN_F[slot] ?? 0.5);
+  const x = sx < 0 ? lx : W * G - lx;
+  const off = BATTEN / 2 - BATTEN_NOTCH; // from the edge, along the outward normal
+  const sa = Math.sin(SLOPE_ANGLE);
+  const ca = Math.cos(SLOPE_ANGLE);
+  return { x: x + sx * sa * off, y: ly + ca * off, rotZ: -sx * SLOPE_ANGLE };
+}
 
 /** Gable height (world) for a width W in G. */
 export function gableHeight(W: number) {
@@ -130,7 +166,7 @@ export function roofPieceCenter(spec: PieceSpec): number {
       return start + (slot + 0.5) * PLANK_W;
     case 'ridge':
     case 'chimney':
-      return start + ((slot + def.length / 2) * PLANK_W) / 4;
+      return start + ((slot + def.length / 2) * PLANK_W) / RIDGE_DIV;
     default:
       return start + (n * PLANK_W) / 2;
   }

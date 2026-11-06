@@ -42,15 +42,15 @@ export const petitChalet: Model = {
       hint: 'The two yellow gables sit on top of the front and back walls.'
     },
     {
-      title: 'The battens — left',
+      title: 'The roof beams — left',
       pieces: battenPieces(gables, -1),
-      hint: 'The light battens slide into the notches of the gables.'
+      hint: 'The orange beams slide into the slanted notches of the gables.'
     },
-    { title: 'The battens — right', pieces: battenPieces(gables, 1) },
+    { title: 'The roof beams — right', pieces: battenPieces(gables, 1) },
     {
       title: 'Roof — left slope',
       pieces: roofPieces(gables, -1),
-      hint: 'Lay the green planks on the battens, side by side.'
+      hint: 'Lay the green planks on the beams, side by side.'
     },
     { title: 'Roof — right slope', pieces: roofPieces(gables, 1) },
     {
@@ -58,7 +58,7 @@ export const petitChalet: Model = {
       pieces: ridgePieces(gables),
       hint: 'A long one and a short one, end to end, close the top of the roof.'
     },
-    { title: 'The chimney', pieces: [chimneyPiece(gables, 14)], hint: 'The chimney sits astride the ridge.' },
+    { title: 'The chimney', pieces: [chimneyPiece(gables, 4)], hint: 'The chimney sits astride the ridge.' },
     { title: 'The fence — posts', pieces: fencePosts(0), hint: 'In front of the chalet, a little fence: small logs as posts.' },
     { title: 'The fence — rails', pieces: fenceRails(2) },
     { title: 'The fence — posts (2)', pieces: fencePosts(4) },

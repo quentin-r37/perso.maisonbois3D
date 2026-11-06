@@ -33,7 +33,7 @@ export interface PieceSpec {
   axis: Axis;
   /** Facing (long log, doors/windows/decor) or slope (roof). */
   side?: Side;
-  /** Position on the roof (plank, batten, ridge/chimney in quarter-planks). */
+  /** Position on the roof (plate, beam, ridge cap/chimney in half-plates). */
   slot?: number;
   /** Roof: gable width (in G). */
   param?: number;

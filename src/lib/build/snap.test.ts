@@ -126,7 +126,8 @@ describe('roof', () => {
     const roofs = findRoofs(g);
     expect(roofs).toHaveLength(1);
     expect(roofs[0].D).toBe(5);
-    expect(roofs[0].n).toBeGreaterThan(2);
+    // small house: 3 plates per slope
+    expect(roofs[0].n).toBe(3);
   });
 
   it('the planks need their battens', () => {
@@ -142,6 +143,21 @@ describe('roof', () => {
     expect(validate(other, both, buildIndex(both)).ok).toBe(false);
   });
 
+  it('two beam lengths: short for gables 5 apart, long for 8 apart', () => {
+    const short = findRoofs(g)[0];
+    const longGables: PieceSpec[] = [
+      { type: 'gable', ix: 0, iz: 0, y: 8, axis: 'x' },
+      { type: 'gable', ix: 0, iz: 8, y: 8, axis: 'x' }
+    ];
+    const long = findRoofs(longGables)[0];
+    expect(validate(roofSpec('batten', short, 1, 0), g, buildIndex(g)).ok).toBe(true);
+    expect(validate(roofSpec('batten-long', short, 1, 0), g, buildIndex(g)).ok).toBe(false);
+    expect(validate(roofSpec('batten-long', long, 1, 0), longGables, buildIndex(longGables)).ok).toBe(true);
+    expect(validate(roofSpec('batten', long, 1, 0), longGables, buildIndex(longGables)).ok).toBe(false);
+    // long house: 4 plates per slope = 2 long ridge caps
+    expect(long.n).toBe(4);
+  });
+
   it('ridge caps must not overlap', () => {
     const roofs = findRoofs(g);
     const battens = [1, -1].flatMap((s) => [0, 1].map((i) => roofSpec('batten', roofs[0], s as 1 | -1, i)));
@@ -149,8 +165,10 @@ describe('roof', () => {
     const long = roofSpec('ridge-long', roofs[0], 1, 0);
     expect(validate(long, base, buildIndex(base)).ok).toBe(true);
     const withLong = [...base, long];
-    expect(validate(roofSpec('ridge-short', roofs[0], 1, 6), withLong, buildIndex(withLong)).ok).toBe(false);
-    expect(validate(roofSpec('ridge-short', roofs[0], 1, 12), withLong, buildIndex(withLong)).ok).toBe(true);
+    expect(validate(roofSpec('ridge-short', roofs[0], 1, 2), withLong, buildIndex(withLong)).ok).toBe(false);
+    expect(validate(roofSpec('ridge-short', roofs[0], 1, 4), withLong, buildIndex(withLong)).ok).toBe(true);
+    // a ridge cap stops on the plate joints
+    expect(validate(roofSpec('ridge-short', roofs[0], 1, 3), base, buildIndex(base)).ok).toBe(false);
   });
 });
 

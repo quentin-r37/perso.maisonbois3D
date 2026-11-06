@@ -1,7 +1,7 @@
 import { getDef, isRoofKind } from '../pieces/catalog';
 import { G, alongDir, perpDir, type PieceSpec, type Side } from './grid';
 import { contactsOf, dropHeight, validate, type Contact, type PointIndex, type Validation } from './snap';
-import { PLANK_W, nearestBatten, roofSpec, type Roof } from './roof';
+import { PLANK_W, RIDGE_DIV, nearestBatten, roofSpec, type Roof } from './roof';
 import { centerOf } from './transform';
 
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
@@ -52,7 +52,10 @@ export function candidateFromHit(type: string, rot: number, hit: Hit, view: Buil
     let slot: number;
     if (def.kind === 'batten') slot = nearestBatten(roof.W, localX);
     else if (def.kind === 'roof') slot = clamp(Math.floor(u), 0, roof.n - 1);
-    else slot = clamp(Math.round(u * 4 - def.length / 2), 0, roof.n * 4 - def.length);
+    else if (def.kind === 'ridge')
+      // ridge caps stop on the plate joints
+      slot = clamp(Math.round(u - def.length / RIDGE_DIV / 2) * RIDGE_DIV, 0, roof.n * RIDGE_DIV - def.length);
+    else slot = clamp(Math.round(u * RIDGE_DIV - def.length / 2), 0, roof.n * RIDGE_DIV - def.length);
     return roofSpec(type, roof, side, slot);
   }
 

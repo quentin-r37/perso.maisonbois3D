@@ -1,6 +1,6 @@
-import { getDef } from '../../pieces/catalog';
+import { CATALOG, getDef } from '../../pieces/catalog';
 import type { Axis, PieceSpec, Side } from '../../build/grid';
-import { BATTEN_F, findRoofs, roofSpec, type Roof } from '../../build/roof';
+import { BATTEN_F, RIDGE_DIV, findRoofs, roofSpec, type Roof } from '../../build/roof';
 
 export interface Step {
   title: string;
@@ -94,13 +94,16 @@ export function roofPieces(gables: PieceSpec[], side: Side): PieceSpec[] {
 
 export function battenPieces(gables: PieceSpec[], side: Side): PieceSpec[] {
   const roof = roofOf(gables);
-  return BATTEN_F.map((_, i) => roofSpec('batten', roof, side, i));
+  // the beam whose length matches the distance between the gables
+  const type = CATALOG.find((d) => d.kind === 'batten' && d.length === roof.D)?.id;
+  if (!type) throw new Error(`No roof beam for gables ${roof.D} apart`);
+  return BATTEN_F.map((_, i) => roofSpec(type, roof, side, i));
 }
 
 /** Ridge caps: long ones first, then a short one, centered on the roof. */
 export function ridgePieces(gables: PieceSpec[]): PieceSpec[] {
   const roof = roofOf(gables);
-  const total = roof.n * 4;
+  const total = roof.n * RIDGE_DIV;
   const L = getDef('ridge-long').length;
   const S = getDef('ridge-short').length;
   const types: string[] = [];
@@ -121,7 +124,7 @@ export function ridgePieces(gables: PieceSpec[]): PieceSpec[] {
   });
 }
 
-/** Chimney astride the ridge, at a position in quarter-planks. */
-export function chimneyPiece(gables: PieceSpec[], quarter: number): PieceSpec {
-  return roofSpec('chimney', roofOf(gables), 1, quarter);
+/** Chimney astride the ridge, at a position in half-plates. */
+export function chimneyPiece(gables: PieceSpec[], half: number): PieceSpec {
+  return roofSpec('chimney', roofOf(gables), 1, half);
 }

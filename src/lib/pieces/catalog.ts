@@ -1,5 +1,5 @@
 export type Kind = 'log' | 'insert' | 'gable' | 'floor' | 'decor' | 'batten' | 'roof' | 'ridge' | 'chimney';
-export type Paint = 'wood' | 'light' | 'white' | 'green' | 'red' | 'yellow' | 'dark' | 'blue' | 'skin' | 'hair';
+export type Paint = 'wood' | 'light' | 'orange' | 'white' | 'green' | 'red' | 'yellow' | 'dark' | 'blue' | 'skin' | 'hair';
 export type Category = 'rondins' | 'ouvertures' | 'toit' | 'deco';
 
 export interface PieceDef {
@@ -7,7 +7,7 @@ export interface PieceDef {
   name: string;
   kind: Kind;
   category: Category;
-  /** Length along the axis, in G (logs: position of the last notch; ridges: in quarter-planks). */
+  /** Length along the axis, in G (logs: position of the last notch; ridge caps/chimney: in half-plates). */
   length: number;
   /** Perpendicular depth (floors). */
   depth: number;
@@ -107,11 +107,13 @@ export const CATALOG: PieceDef[] = [
     paint: 'yellow',
     rotations: 2
   },
-  { ...base, id: 'batten', name: 'Batten', kind: 'batten', category: 'toit', paint: 'light' },
+  // two lengths: gables 5 steps apart (medium walls) or 8 steps apart (long walls)
+  { ...base, id: 'batten', name: 'Roof beam', kind: 'batten', category: 'toit', length: 5, paint: 'orange' },
+  { ...base, id: 'batten-long', name: 'Long roof beam', kind: 'batten', category: 'toit', length: 8, paint: 'orange' },
   { ...base, id: 'roof-plank', name: 'Roof plank', kind: 'roof', category: 'toit', paint: 'green' },
-  { ...base, id: 'ridge-long', name: 'Long ridge cap', kind: 'ridge', category: 'toit', length: 12, paint: 'red' },
-  { ...base, id: 'ridge-short', name: 'Short ridge cap', kind: 'ridge', category: 'toit', length: 6, paint: 'red' },
-  { ...base, id: 'chimney', name: 'Chimney', kind: 'chimney', category: 'toit', length: 2, paint: 'red' },
+  { ...base, id: 'ridge-long', name: 'Long ridge cap', kind: 'ridge', category: 'toit', length: 4, paint: 'red' },
+  { ...base, id: 'ridge-short', name: 'Short ridge cap', kind: 'ridge', category: 'toit', length: 2, paint: 'red' },
+  { ...base, id: 'chimney', name: 'Chimney', kind: 'chimney', category: 'toit', length: 1, paint: 'red' },
   {
     ...base,
     id: 'floor',

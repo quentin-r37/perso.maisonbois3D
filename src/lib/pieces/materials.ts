@@ -68,6 +68,7 @@ function grainTexture(): Texture {
 const PAINT_COLORS: Record<Paint, string> = {
   wood: '#d9a066',
   light: '#f0d6a8',
+  orange: '#e8862a',
   white: '#f6f3ec',
   green: '#6fbf3b',
   red: '#d42a25',

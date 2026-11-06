@@ -17,18 +17,21 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { getDef, type Paint } from './catalog';
 import { G, LOG_W, OVERHANG, Q, type PieceSpec } from '../build/grid';
 import {
-  BATTEN,
   BATTEN_F,
-  BATTEN_LEN,
-  BATTEN_NOTCH,
+  battenLength,
   EAVE,
   GABLE_C,
   GABLE_T,
   PLANK_T,
   PLANK_W,
+  RIDGE_DIV,
+  PLANK_GROOVE,
   ROOF_LIFT,
   SLOPE,
   SLOPE_ANGLE,
+  BATTEN as BATTEN_W,
+  BATTEN_NOTCH,
+  battenPose,
   gableHeight,
   slopePoint
 } from '../build/roof';
@@ -348,29 +351,39 @@ const SA = Math.sin(A);
 const CA = Math.cos(A);
 
 function gableParts(W: number): Part[] {
+  // thick board (like a log), notches perpendicular to the slope for the beams,
+  // notched underneath at the corners
   const Hg = gableHeight(W);
   const Ww = W * G;
   const run = Ww / 2 + GABLE_C;
-  const len = Math.hypot(run, Hg);
-  const df = BATTEN / 2 / len;
+  const w2 = LOG_W / 2;
+  const half = BATTEN_W / 2;
   const s = new Shape();
   s.moveTo(-GABLE_C, 0);
+  for (const cx of [0, Ww]) {
+    s.lineTo(cx - w2, 0);
+    s.lineTo(cx - w2, Q);
+    s.lineTo(cx + w2, Q);
+    s.lineTo(cx + w2, 0);
+  }
   s.lineTo(Ww + GABLE_C, 0);
-  // right slope (upward), inward normal = (-sin, -cos)
-  const R = (f: number): [number, number] => [Ww + GABLE_C - f * run, f * Hg];
+  // right slope, going up: tangent (-cos, sin), inward normal (-sin, -cos)
   for (const f of BATTEN_F) {
-    const a = R(f - df);
-    const b = R(f + df);
+    const px = Ww + GABLE_C - f * run;
+    const py = f * Hg;
+    const a: [number, number] = [px + CA * half, py - SA * half];
+    const b: [number, number] = [px - CA * half, py + SA * half];
     s.lineTo(a[0], a[1]);
     s.lineTo(a[0] - SA * BATTEN_NOTCH, a[1] - CA * BATTEN_NOTCH);
     s.lineTo(b[0] - SA * BATTEN_NOTCH, b[1] - CA * BATTEN_NOTCH);
     s.lineTo(b[0], b[1]);
   }
   s.lineTo(Ww / 2, Hg);
-  // left slope (downward), inward normal = (sin, -cos)
+  // left slope, going down: tangent (cos, sin), inward normal (sin, -cos)
   for (const f of [...BATTEN_F].reverse()) {
-    const a = slopePoint(W, f + df);
-    const b = slopePoint(W, f - df);
+    const [px, py] = slopePoint(W, f);
+    const a: [number, number] = [px + CA * half, py + SA * half];
+    const b: [number, number] = [px - CA * half, py - SA * half];
     s.lineTo(a[0], a[1]);
     s.lineTo(a[0] + SA * BATTEN_NOTCH, a[1] - CA * BATTEN_NOTCH);
     s.lineTo(b[0] + SA * BATTEN_NOTCH, b[1] - CA * BATTEN_NOTCH);
@@ -378,19 +391,15 @@ function gableParts(W: number): Part[] {
   }
   s.closePath();
   const hole = new Path();
-  hole.absarc(Ww / 2, Hg * 0.42, 0.17, 0, Math.PI * 2, true);
+  hole.absarc(Ww / 2, Hg * 0.45, 0.15, 0, Math.PI * 2, true);
   s.holes.push(hole);
-  return [extrude(s, GABLE_T, 'yellow', undefined, 0.012)];
+  return [extrude(s, GABLE_T, 'yellow', undefined, 0.02)];
 }
 
-function battenParts(W: number, side: number, slot: number): Part[] {
-  const sx = side < 0 ? -1 : 1;
-  const [lx, ly] = slopePoint(W, BATTEN_F[slot] ?? 0.5);
-  const x = sx < 0 ? lx : W * G - lx;
-  // sits at the bottom of the notch; outward normal = (-sin, cos) on the left, (sin, cos) on the right
-  const off = BATTEN / 2 - BATTEN_NOTCH;
-  const c: [number, number, number] = [x + sx * SA * off, ly + CA * off, 0];
-  return [rboxAt([BATTEN, BATTEN, BATTEN_LEN], c, [0, 0, -sx * A], 'light', 0.015)];
+function battenParts(W: number, D: number, side: number, slot: number): Part[] {
+  // orange square beam with sharp edges, tilted with the slope, from one gable to the other
+  const p = battenPose(W, side, slot);
+  return [rboxAt([BATTEN_W, BATTEN_W, battenLength(D)], [p.x, p.y, 0], [0, 0, p.rotZ], 'orange', 0)];
 }
 
 function plankParts(W: number, side: number, width = PLANK_W - 0.012): Part[] {
@@ -402,12 +411,34 @@ function plankParts(W: number, side: number, width = PLANK_W - 0.012): Part[] {
   const Lp = Lsl + EAVE + over;
   const dist = Lp / 2 - over;
   const sx = side < 0 ? -1 : 1;
-  // center on the gable line, shifted along the outward normal (battens + half-plank)
+  // center on the gable line, shifted along the outward normal (half-plank)
   const mx = Ww / 2 + sx * CA * dist;
   const my = Hg - SA * dist;
   const off = ROOF_LIFT + PLANK_T / 2;
-  const c: [number, number, number] = [mx + sx * SA * off, my + CA * off, 0];
-  return [rboxAt([Lp, PLANK_T, width], c, [0, 0, -sx * A], 'green', 0.02)];
+  const cx = mx + sx * SA * off;
+  const cy = my + CA * off;
+  const rot = -sx * A;
+  // local x of a point located s below the ridge (local +x = uphill on the left, downhill on the right)
+  const localX = (s: number) => (sx < 0 ? dist - s : s - dist);
+  // two grooves underneath, facing the beams
+  const grooves = BATTEN_F.map((f) => localX((1 - f) * Lsl))
+    .map((x) => [x - BATTEN_W / 2 - 0.01, x + BATTEN_W / 2 + 0.01] as const)
+    .sort((a, b) => a[0] - b[0]);
+  // one piece: profile (length × thickness) with the 2 grooves underneath, extruded across the width
+  const T2 = PLANK_T / 2;
+  const prof = new Shape();
+  prof.moveTo(-Lp / 2, -T2);
+  for (const [g0, g1] of grooves) {
+    prof.lineTo(g0, -T2);
+    prof.lineTo(g0, -T2 + PLANK_GROOVE);
+    prof.lineTo(g1, -T2 + PLANK_GROOVE);
+    prof.lineTo(g1, -T2);
+  }
+  prof.lineTo(Lp / 2, -T2);
+  prof.lineTo(Lp / 2, T2);
+  prof.lineTo(-Lp / 2, T2);
+  prof.closePath();
+  return [extrude(prof, width, 'green', mat([cx, cy, 0], [0, 0, rot]), 0.015)];
 }
 
 function ridgeApex(W: number) {
@@ -417,7 +448,7 @@ function ridgeApex(W: number) {
 const RIDGE_T = 0.11;
 const RIDGE_ARM = 0.42;
 
-function ridgeParts(W: number, quarters: number): Part[] {
+function ridgeParts(W: number, units: number): Part[] {
   // solid red right angle (L) placed astride the ridge, with a small groove inside the apex
   const apex = ridgeApex(W);
   const w = RIDGE_ARM;
@@ -434,7 +465,7 @@ function ridgeParts(W: number, quarters: number): Part[] {
   s.lineTo(0, T);
   s.lineTo(-w, -w * SLOPE + T);
   s.closePath();
-  return [extrude(s, (quarters * PLANK_W) / 4 - 0.015, 'red', mat([(W * G) / 2, apex, 0]), 0.01)];
+  return [extrude(s, (units * PLANK_W) / RIDGE_DIV - 0.015, 'red', mat([(W * G) / 2, apex, 0]), 0.01)];
 }
 
 function chimneyParts(W: number): Part[] {
@@ -570,7 +601,7 @@ export function getGeometry(spec: GeoSpec): PieceGeometry {
       parts = gableParts(def.length);
       break;
     case 'batten':
-      parts = battenParts(spec.param ?? 5, spec.side ?? 1, spec.slot ?? 0);
+      parts = battenParts(spec.param ?? 5, def.length, spec.side ?? 1, spec.slot ?? 0);
       break;
     case 'roof':
       parts = plankParts(spec.param ?? 5, spec.side ?? 1);
