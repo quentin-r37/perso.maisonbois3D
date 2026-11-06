@@ -1,6 +1,6 @@
 <script lang="ts">
   import { app } from '../app.svelte';
-  import { MODELS } from '../guide/models';
+  import { MODELS, type Model } from '../guide/models';
   import { getDef } from '../pieces/catalog';
   import { thumbs } from './thumbs.svelte';
   import Icon from './Icon.svelte';
@@ -9,6 +9,17 @@
   const steps = $derived(g.model.steps.length);
   const pct = $derived(Math.round((g.placedCount / g.totalPieces) * 100));
   let collapsed = $state(false);
+  /** The model list; opens by itself when nothing has been built yet. */
+  let choosing = $state(MODELS.length > 1 && g.placedCount === 0);
+  /** Progress of every model, read when the list opens. */
+  const progress = $derived(choosing ? new Map(MODELS.map((m) => [m.id, app.progressOf(m)])) : new Map<string, number>());
+  const count = (m: Model) => m.steps.reduce((n, s) => n + s.pieces.length, 0);
+
+  function choose(id: string) {
+    app.setModel(id);
+    choosing = false;
+    collapsed = false;
+  }
 </script>
 
 <section class="booklet" class:collapsed aria-label="Instruction booklet">
@@ -18,11 +29,9 @@
       <span class="model">{g.model.name}</span>
     </button>
     {#if MODELS.length > 1}
-      <select value={g.modelId} onchange={(e) => app.setModel(e.currentTarget.value)} aria-label="Model">
-        {#each MODELS as m (m.id)}
-          <option value={m.id}>{m.name}</option>
-        {/each}
-      </select>
+      <button class="change" class:on={choosing} onclick={() => ((choosing = !choosing), (collapsed = false))} aria-expanded={choosing}>
+        {choosing ? 'Close' : 'Models'}
+      </button>
     {/if}
   </header>
 
@@ -31,14 +40,47 @@
   </div>
 
   {#if !collapsed}
-    {#if g.done}
+    {#if choosing}
+      <div class="choose">
+        <h2>Which chalet will you build?</h2>
+        <ul class="models">
+          {#each MODELS as m (m.id)}
+            {@const p = progress.get(m.id) ?? 0}
+            <li>
+              <button class="card" class:current={m.id === g.modelId} onclick={() => choose(m.id)}>
+                <span class="cover">
+                  {#if thumbs.models[m.id]}<img src={thumbs.models[m.id]} alt="" />{/if}
+                  {#if p >= 1}<span class="badge done">★ Built</span>
+                  {:else if p > 0}<span class="badge">{Math.round(p * 100)} %</span>{/if}
+                </span>
+                <span class="body">
+                  <span class="name">{m.name}</span>
+                  <span class="desc">{m.description}</span>
+                  <span class="meta">
+                    <span class="level" title="Difficulty" aria-label="Difficulty {m.level} of 3">
+                      {#each [1, 2, 3] as i (i)}<span class:lit={i <= m.level}>●</span>{/each}
+                    </span>
+                    <span>{count(m)} pieces · {m.steps.length} steps</span>
+                  </span>
+                </span>
+              </button>
+            </li>
+          {/each}
+        </ul>
+        <p class="tip">Each chalet keeps its progress: you can come back to it later.</p>
+      </div>
+    {:else if g.done}
       <div class="done">
         <div class="medal" aria-hidden="true">★</div>
         <h2>Well done!</h2>
         <p>Your chalet is finished. Turn the camera to admire it, or build it again.</p>
         <div class="actions">
           <button class="btn" onclick={() => app.restartGuide()}>Start over</button>
-          <button class="btn primary" onclick={() => app.setMode('libre')}>Free build</button>
+          {#if MODELS.length > 1}
+            <button class="btn primary" onclick={() => (choosing = true)}>Another chalet</button>
+          {:else}
+            <button class="btn primary" onclick={() => app.setMode('libre')}>Free build</button>
+          {/if}
         </div>
       </div>
     {:else if g.step}
@@ -117,15 +159,111 @@
     font-weight: 600;
     color: var(--ink);
   }
-  select {
+  .change {
     font: inherit;
-    font-size: 13px;
-    max-width: 120px;
-    border-radius: 8px;
-    border: 1.5px solid var(--line);
-    background: var(--card);
+    font-size: 13.5px;
+    font-weight: 600;
+    padding: 6px 12px;
+    border-radius: 99px;
+    border: 2px solid var(--wood-dark);
+    background: var(--paper);
     color: var(--ink);
-    padding: 4px;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .change:hover,
+  .change.on {
+    background: var(--card);
+  }
+  .choose {
+    padding: 0 14px 14px;
+  }
+  .models {
+    list-style: none;
+    padding: 0;
+    margin: 8px 0 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .card {
+    width: 100%;
+    display: flex;
+    gap: 10px;
+    align-items: stretch;
+    padding: 6px;
+    border-radius: 14px;
+    border: 2px solid transparent;
+    background: var(--card);
+    font: inherit;
+    color: var(--ink);
+    text-align: left;
+    cursor: pointer;
+  }
+  .card:hover {
+    border-color: var(--line);
+  }
+  .card.current {
+    border-color: var(--green);
+    background: var(--green-soft);
+  }
+  .cover {
+    position: relative;
+    flex: 0 0 92px;
+    height: 72px;
+    border-radius: 10px;
+    background: var(--paper);
+    overflow: hidden;
+  }
+  .cover img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+  .badge {
+    position: absolute;
+    left: 4px;
+    bottom: 4px;
+    font-size: 11.5px;
+    font-weight: 700;
+    color: #fff;
+    background: #3d9bff;
+    border-radius: 99px;
+    padding: 0 7px;
+  }
+  .badge.done {
+    background: var(--green);
+  }
+  .body {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .name {
+    font-weight: 600;
+    font-size: 15px;
+  }
+  .desc {
+    font-size: 13px;
+    line-height: 1.3;
+    color: var(--ink-soft);
+  }
+  .meta {
+    margin-top: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12.5px;
+    color: var(--ink-soft);
+  }
+  .level {
+    letter-spacing: 1px;
+    color: var(--line);
+  }
+  .level .lit {
+    color: var(--wood-dark);
   }
   .bar {
     height: 8px;

@@ -1,8 +1,8 @@
-import { BuildStore, writeStorage } from './build/store.svelte';
+import { BuildStore, sanitizeSpecs, writeStorage } from './build/store.svelte';
 import type { PieceSpec } from './build/grid';
 import { canRemove, dropHeight, specKey } from './build/snap';
 import { candidateFromHit, evaluate, magnet, nearestValid, normRot, rotOf, type Ghost, type Hit } from './build/placement';
-import { getModel, MODELS } from './guide/models';
+import { DEFAULT_MODEL_ID, getModel, type Model } from './guide/models';
 import { getDef, isRoofKind } from './pieces/catalog';
 import { bonk, chime, fanfare, pop, setMuted } from './audio/sfx';
 import { axisSideToRot } from './build/grid';
@@ -20,7 +20,7 @@ function readJSON<T>(key: string, fallback: T): T {
 }
 
 class GuideState {
-  modelId = $state(MODELS[0].id);
+  modelId = $state(DEFAULT_MODEL_ID);
   readonly build: BuildStore;
 
   model = $derived(getModel(this.modelId));
@@ -54,7 +54,7 @@ class GuideState {
 
   constructor(build: BuildStore) {
     this.build = build;
-    this.modelId = readJSON('chalet.guide.model.v1', MODELS[0].id);
+    this.modelId = getModel(readJSON('chalet.guide.model.v1', DEFAULT_MODEL_ID)).id;
   }
 }
 
@@ -63,6 +63,9 @@ export interface Toast {
   text: string;
   kind: 'info' | 'success' | 'warn';
 }
+
+/** Saved progress of the models that are not open in the booklet. */
+const stashKey = (modelId: string) => `chalet.guide.stash.v1.${modelId}`;
 
 class AppState {
   mode = $state<Mode>('libre');
@@ -324,14 +327,34 @@ class AppState {
     );
   }
 
+  /** Switches the booklet to another model; each model keeps its own progress. */
   setModel(id: string) {
     if (id === this.guide.modelId) return;
+    writeStorage(stashKey(this.guide.modelId), this.guideBuild.toSpecs());
     this.guide.modelId = id;
-    this.guideBuild.load([]);
+    this.guideBuild.load(sanitizeSpecs(readJSON(stashKey(id), [])));
     this.guideBuild.save();
+    this.ghost = null;
+    this.pending = false;
     this.celebrating = false;
     this.savePrefs();
     this.#autoSelectForStep();
+  }
+
+  /** Progress of a model, 0 to 1 (the open model, or its saved progress). */
+  progressOf(model: Model): number {
+    const keys =
+      model.id === this.guide.modelId
+        ? this.guideBuild.keys
+        : new Set(sanitizeSpecs(readJSON(stashKey(model.id), [])).map(specKey));
+    let total = 0;
+    let placed = 0;
+    for (const s of model.steps)
+      for (const p of s.pieces) {
+        total++;
+        if (keys.has(specKey(p))) placed++;
+      }
+    return total ? placed / total : 0;
   }
 
   restartGuide() {

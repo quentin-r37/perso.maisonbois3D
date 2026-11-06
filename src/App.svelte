@@ -9,15 +9,25 @@
   import Icon from './lib/ui/Icon.svelte';
   import { app } from './lib/app.svelte';
   import { thumbs } from './lib/ui/thumbs.svelte';
-  import { renderThumbnails } from './lib/pieces/thumbnails';
+  import { renderModelThumbnails, renderThumbnails } from './lib/pieces/thumbnails';
+  import { MODELS } from './lib/guide/models';
   import { getDef } from './lib/pieces/catalog';
 
   const coarse = typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches;
 
   onMount(() => {
     // thumbnails rendered after the first frame so the scene isn't delayed
-    const id = requestAnimationFrame(() => (thumbs.map = renderThumbnails()));
-    return () => cancelAnimationFrame(id);
+    let id2 = 0;
+    const id = requestAnimationFrame(() => {
+      thumbs.map = renderThumbnails();
+      id2 = requestAnimationFrame(
+        () => (thumbs.models = renderModelThumbnails(MODELS.map((m) => ({ id: m.id, pieces: m.steps.flatMap((s) => s.pieces) }))))
+      );
+    });
+    return () => {
+      cancelAnimationFrame(id);
+      cancelAnimationFrame(id2);
+    };
   });
 
   function onKey(e: KeyboardEvent) {

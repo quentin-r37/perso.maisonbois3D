@@ -12,6 +12,8 @@ export interface Model {
   id: string;
   name: string;
   description: string;
+  /** Difficulty, 1 (easy) to 3. */
+  level: 1 | 2 | 3;
   /** Camera target (world). */
   center: [number, number, number];
   steps: Step[];

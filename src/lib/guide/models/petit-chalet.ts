@@ -33,6 +33,7 @@ export const petitChalet: Model = {
   id: 'petit-chalet',
   name: 'The little mountain chalet',
   description: 'A square chalet of medium logs, with a door, two windows, a gable roof and its little fence.',
+  level: 2,
   center: [1.5, 1.6, 1.4],
   steps: [
     ...wallSteps({ walls, xTop: XTOP }),

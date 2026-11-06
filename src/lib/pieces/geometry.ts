@@ -329,12 +329,15 @@ function windowParts(L: number, hq: number): Part[] {
     const y = j0 + ((j1 - j0) * j) / 4;
     parts.push(rbox(i0, i1, y - bar / 2, y + bar / 2, -bar / 2, bar / 2, 'dark', 0));
   }
-  // red shutters folded back against the outside face (+z), with a little fir tree cut out
+  // red shutters opened outward (+z), with a little fir tree cut out.
+  // One step beside the frame is the chalet corner, whose crossing heads stick out by
+  // OVERHANG: folded flat, the shutters would go through them, so they stay half-open
+  // (~54° from the wall) and pass in front of the heads.
   const sw = (i1 - i0) / 2 + 0.03;
   const sh = H - 0.14;
   const t = 0.05;
   const zf = d / 2 + 0.03;
-  const fold = Math.PI - 0.28;
+  const fold = Math.PI - 0.95;
   parts.push(
     hingedLeaf(panel(0, sw, sh, treeHole(sw / 2, sh * 0.6, 0.16)), t, 'red', [x0 - JAMB, 0.07, zf], fold, 1),
     hingedLeaf(panel(-sw, 0, sh, treeHole(-sw / 2, sh * 0.6, 0.16)), t, 'red', [x1 + JAMB, 0.07, zf], fold, -1)
