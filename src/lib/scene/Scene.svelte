@@ -18,7 +18,7 @@
 
   const BG = '#efe4d2';
   scene.background = new Color(BG);
-  scene.fog = new Fog(BG, 20, 45);
+  scene.fog = new Fog(BG, 40, 100);
   const pmrem = new PMREMGenerator(renderer);
   scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
   scene.environmentIntensity = 0.45;
@@ -41,7 +41,7 @@
     target={target}
     maxPolarAngle={Math.PI * 0.47}
     minDistance={2}
-    maxDistance={30}
+    maxDistance={60}
     autoRotate={app.celebrating}
     autoRotateSpeed={1.6}
   />

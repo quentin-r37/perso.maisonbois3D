@@ -10,7 +10,7 @@
   import { playMatTexture, tableTexture } from '../pieces/materials';
   import { G } from '../build/grid';
 
-  const SIZE = 80;
+  const SIZE = 200;
   const tex = tableTexture();
   tex.repeat.set(SIZE / 8, SIZE / 8);
   const tableMat = new MeshStandardMaterial({ map: tex, roughness: 0.85, color: '#ffffff' });
