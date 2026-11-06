@@ -1,0 +1,47 @@
+:root {
+  --paper: #fbf5ea;
+  --card: #f1e6d3;
+  --ink: #3b2a1d;
+  --ink-soft: #6e5843;
+  --line: #dccab0;
+  --wood: #d9a066;
+  --wood-dark: #b07a45;
+  --green: #5fae2e;
+  --green-soft: #e4f3d6;
+  --red: #d42a25;
+  --yellow: #f3d23a;
+  --shadow: 0 6px 18px rgba(80, 50, 20, 0.16), 0 1px 3px rgba(80, 50, 20, 0.12);
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: #efe4d2;
+  color: var(--ink);
+  font-family: 'Fredoka', ui-rounded, 'Segoe UI', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button {
+  touch-action: manipulation;
+}
+
+button:focus-visible,
+select:focus-visible {
+  outline: 3px solid #3d9bff;
+  outline-offset: 2px;
+}
+
+#app {
+  height: 100%;
+}
