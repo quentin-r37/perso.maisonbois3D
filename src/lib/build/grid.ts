@@ -16,6 +16,15 @@ export const LOG_H = 4 * Q;
 /** Distance from the center of the end notch to the tip of the head. */
 export const OVERHANG = 0.55;
 
+/** How far the floor board overhangs past its grid lines. */
+export const FLOOR_MARGIN = 0.3;
+/**
+ * The floor board's back corners are notched around the heads of the corner logs
+ * one step behind it (a 2-deep floor in a 3-deep room, against a wall that keeps
+ * going up). Local z (from the front grid line) where the notch starts.
+ */
+export const floorNotchZ = (depth: number) => (depth + 1) * G - OVERHANG;
+
 export const GRID_MIN = -16;
 export const GRID_MAX = 22;
 export const MAX_Y = 200;

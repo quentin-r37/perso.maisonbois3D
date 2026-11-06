@@ -1,5 +1,5 @@
 import { getDef, isRoofKind } from '../pieces/catalog';
-import { G, LOG_W, OVERHANG, Q, type PieceSpec } from './grid';
+import { FLOOR_MARGIN, G, LOG_W, OVERHANG, Q, floorNotchZ, type PieceSpec } from './grid';
 import { GABLE_C, GABLE_T, gableHeight } from './roof';
 
 /**
@@ -73,9 +73,18 @@ export function localBoxes(type: string): LocalBox[] {
     case 'gable':
       b = gableBoxes(def.length);
       break;
-    case 'floor':
-      b = [{ x0: -0.3, x1: def.length * G + 0.3, z0: -0.3, z1: def.depth * G + 0.3, y0: 0, y1: def.h }];
+    case 'floor': {
+      // board minus its back-corner notches, so it can slide under the heads of the corner logs;
+      // its front edge stops against the front log (it sits inside the frame, not on top of it)
+      const L = def.length * G;
+      const zn = floorNotchZ(def.depth);
+      const m = FLOOR_MARGIN;
+      b = [
+        { x0: -m, x1: L + m, z0: W2, z1: zn, y0: 0, y1: def.h },
+        { x0: W2, x1: L - W2, z0: zn, z1: def.depth * G + m, y0: 0, y1: def.h }
+      ];
       break;
+    }
     case 'decor':
       b =
         type === 'tree'

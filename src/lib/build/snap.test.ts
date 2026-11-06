@@ -177,3 +177,34 @@ it('specKey ignores fields that do not apply', () => {
     specKey({ type: 'medium', ix: 0, iz: 0, y: 0, axis: 'x' })
   );
 });
+
+it('a floor slides under the heads of the corner logs behind it (notched back corners)', () => {
+  // 5-wide room, side walls on the table; a wall keeps going up one step behind the floor
+  const pieces: PieceSpec[] = [
+    { type: 'long', ix: 0, iz: 0, y: 0, axis: 'z' },
+    { type: 'long', ix: 5, iz: 0, y: 0, axis: 'z' },
+    { type: 'small', ix: 0, iz: 3, y: 4, axis: 'z' },
+    { type: 'small', ix: 5, iz: 3, y: 4, axis: 'z' }
+  ];
+  const idx = buildIndex(pieces);
+  const floor: PieceSpec = { type: 'floor', ix: 0, iz: 0, y: 0, axis: 'x' };
+  floor.y = dropHeight(idx, floor);
+  expect(floor.y).toBe(4);
+  expect(validate(floor, pieces, idx).ok).toBe(true);
+});
+
+it('a balcony floor sits inside its frame: the front log runs in front of it, not under it', () => {
+  // side walls on the table, front log crossing them (top 2 Q above them), wall going up behind
+  const pieces: PieceSpec[] = [
+    { type: 'long', ix: 0, iz: 0, y: 0, axis: 'z' },
+    { type: 'long', ix: 5, iz: 0, y: 0, axis: 'z' },
+    { type: 'medium', ix: 0, iz: 0, y: 2, axis: 'x' },
+    { type: 'small', ix: 0, iz: 3, y: 4, axis: 'z' },
+    { type: 'small', ix: 5, iz: 3, y: 4, axis: 'z' }
+  ];
+  const idx = buildIndex(pieces);
+  const floor: PieceSpec = { type: 'floor', ix: 0, iz: 0, y: 0, axis: 'x' };
+  floor.y = dropHeight(idx, floor);
+  expect(floor.y).toBe(4);
+  expect(validate(floor, pieces, idx).ok).toBe(true);
+});

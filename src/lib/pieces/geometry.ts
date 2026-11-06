@@ -15,7 +15,7 @@ import {
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { getDef, type Paint } from './catalog';
-import { G, LOG_W, OVERHANG, Q, type PieceSpec } from '../build/grid';
+import { FLOOR_MARGIN, G, LOG_W, OVERHANG, Q, floorNotchZ, type PieceSpec } from '../build/grid';
 import {
   BATTEN_F,
   battenLength,
@@ -490,21 +490,24 @@ function chimneyParts(W: number): Part[] {
 // ---------------------------------------------------------------------------
 
 function floorParts(L: number, D: number): Part[] {
-  // single green board, with notches at the back corners to fit around the logs
-  const x0 = -0.3;
-  const x1 = L * G + 0.3;
-  const z0 = -0.3;
-  const z1 = D * G + 0.3;
-  const n = 0.2;
+  // single green board, with notches at the back corners to fit around the heads
+  // of the corner logs; front edge against the front log, which runs in front of it
+  // (same outline as its collision boxes in volumes.ts)
+  const w = LOG_W / 2;
+  const x0 = -FLOOR_MARGIN;
+  const x1 = L * G + FLOOR_MARGIN;
+  const z0 = w;
+  const z1 = D * G + FLOOR_MARGIN;
+  const zn = floorNotchZ(D);
   const s = new Shape();
   s.moveTo(x0, z0);
   s.lineTo(x1, z0);
-  s.lineTo(x1, z1 - n);
-  s.lineTo(x1 - n, z1 - n);
-  s.lineTo(x1 - n, z1);
-  s.lineTo(x0 + n, z1);
-  s.lineTo(x0 + n, z1 - n);
-  s.lineTo(x0, z1 - n);
+  s.lineTo(x1, zn);
+  s.lineTo(L * G - w, zn);
+  s.lineTo(L * G - w, z1);
+  s.lineTo(w, z1);
+  s.lineTo(w, zn);
+  s.lineTo(x0, zn);
   s.closePath();
   // rotation +90° around X: shape y → world +z, thickness along y
   return [extrude(s, Q, 'green', mat([0, Q / 2, 0], [Math.PI / 2, 0, 0]), 0.015)];
