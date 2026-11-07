@@ -16,6 +16,8 @@ export const fx = {
   events: [] as FxEvent[],
   /** Screen shake amplitude (0..1), decays by itself. */
   shake: 0,
+  /** Explosion flash (0..1), decays (DemolitionFx). */
+  flash: 0,
   /** Slow motion: time scale `scale` held for `hold` s, then back to 1 over `ramp` s. */
   slow: { scale: 1, hold: 0, ramp: 0, t: Infinity }
 };
@@ -50,5 +52,6 @@ export function timeScale(dt: number): number {
 export function resetFx() {
   fx.events.length = 0;
   fx.shake = 0;
+  fx.flash = 0;
   fx.slow = { scale: 1, hold: 0, ramp: 0, t: Infinity };
 }

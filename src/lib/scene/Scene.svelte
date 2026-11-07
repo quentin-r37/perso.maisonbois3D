@@ -1,7 +1,8 @@
 <script lang="ts">
   import { T, useTask, useThrelte } from '@threlte/core';
   import { OrbitControls } from '@threlte/extras';
-  import { Color, Fog, Group, PMREMGenerator } from 'three';
+  import { untrack } from 'svelte';
+  import { Color, Fog, Group, HemisphereLight, PMREMGenerator } from 'three';
   import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
   import { app } from '../app.svelte';
   import { getDef, isRoofKind } from '../pieces/catalog';
@@ -17,7 +18,7 @@
   import DemolitionFx from './DemolitionFx.svelte';
   import { fx } from '../destroy/fx';
 
-  const { scene, renderer } = useThrelte();
+  const { scene, renderer, dpr } = useThrelte();
 
   const BG = '#efe4d2';
   scene.background = new Color(BG);
@@ -40,10 +41,43 @@
       : []
   );
 
+  // explosion flash: the ambient light flares up (adding a light would recompile every shader)
+  const HEMI = 0.9;
+  let hemi: HemisphereLight | undefined = $state();
+
+  // Adaptive resolution during a demolition: if frames take too long, render fewer pixels
+  // (back to normal afterwards).
+  let savedDpr = 0;
+  let frameMs = 16.7;
+  let sinceChange = 0;
+  $effect(() => {
+    const active = app.demo.active;
+    untrack(() => {
+      if (active) {
+        savedDpr = dpr.current;
+        frameMs = 16.7;
+        sinceChange = 0;
+      } else if (savedDpr) {
+        if (dpr.current !== savedDpr) dpr.set(savedDpr);
+        savedDpr = 0;
+      }
+    });
+  });
+  function adapt(delta: number) {
+    // quick to react: an explosion is over in a second or two
+    frameMs = frameMs * 0.8 + Math.min(delta, 0.1) * 1000 * 0.2;
+    if (++sinceChange < 12 || frameMs < 20 || dpr.current <= 1) return;
+    dpr.set(Math.max(1, dpr.current - 0.25));
+    sinceChange = 0;
+    frameMs = 16.7;
+  }
+
   // screen shake: the whole world (table + pieces) jitters, the camera stays put
   let world: Group | undefined = $state();
   useTask(
     (delta) => {
+      if (hemi) hemi.intensity = HEMI + fx.flash * 5;
+      if (app.demo.active) adapt(delta);
       if (!world) return;
       const s = fx.shake;
       if (s < 0.002) {
@@ -75,7 +109,7 @@
   />
 </T.PerspectiveCamera>
 
-<T.HemisphereLight args={['#fff6e8', '#8a6a4a', 0.9]} />
+<T.HemisphereLight bind:ref={hemi} args={['#fff6e8', '#8a6a4a', HEMI]} />
 <T.DirectionalLight
   position={[-5, 11, -7]}
   intensity={2.4}
@@ -100,14 +134,20 @@
 <T.Group bind:ref={world}>
   <Table />
 
+  <!-- the pieces stay mounted during a demolition (hidden): remounting them all costs a frame freeze -->
+  {#each build.pieces as piece (piece.uid)}
+    <Piece
+      {piece}
+      animate={build.consumeFresh(piece.uid)}
+      highlight={app.tool === 'erase' && app.hoverUid === piece.uid}
+      hidden={app.demo.active}
+    />
+  {/each}
   {#if app.demo.active}
     <Demolition pieces={app.demo.pieces} />
-    <DemolitionFx />
-  {:else}
-    {#each build.pieces as piece (piece.uid)}
-      <Piece {piece} animate={build.consumeFresh(piece.uid)} highlight={app.tool === 'erase' && app.hoverUid === piece.uid} />
-    {/each}
   {/if}
+  <!-- always mounted: its shaders are compiled at startup, not at the first explosion -->
+  <DemolitionFx active={app.demo.active} />
 </T.Group>
 
 {#each blueprints as spec (specKey(spec))}

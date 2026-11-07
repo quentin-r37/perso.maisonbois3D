@@ -12,9 +12,11 @@
     piece: PlacedPiece;
     animate?: boolean;
     highlight?: boolean;
+    /** Hidden (during a demolition: debris stand in for the pieces, which stay mounted). */
+    hidden?: boolean;
   }
 
-  let { piece, animate = false, highlight = false }: Props = $props();
+  let { piece, animate = false, highlight = false, hidden = false }: Props = $props();
 
   const geo = $derived(getGeometry(piece));
   const mats = $derived(materialsFor(geo.paints, piece.uid % 3));
@@ -71,7 +73,7 @@
   });
 </script>
 
-<T.Group position={[t.position[0], t.position[1] + offset, t.position[2]]} rotation.y={t.rotationY}>
+<T.Group position={[t.position[0], t.position[1] + offset, t.position[2]]} rotation.y={t.rotationY} visible={!hidden}>
   <T.Mesh
     geometry={geo.geometry}
     material={mats}

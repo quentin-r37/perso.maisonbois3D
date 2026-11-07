@@ -25,9 +25,16 @@
         () => (thumbs.models = renderModelThumbnails(MODELS.map((m) => ({ id: m.id, pieces: m.steps.flatMap((s) => s.pieces) }))))
       );
     });
+    // the physics engine of the demolition (~1.7 MB), loaded in the background once the
+    // app has settled: the first demolition doesn't wait for it
+    const preload = setTimeout(() => {
+      if ('requestIdleCallback' in window) requestIdleCallback(() => app.preloadDemolition(), { timeout: 5000 });
+      else app.preloadDemolition();
+    }, 4000);
     return () => {
       cancelAnimationFrame(id);
       cancelAnimationFrame(id2);
+      clearTimeout(preload);
     };
   });
 

@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest';
+import { Quaternion, Vector3 } from 'three';
 import type { PlacedPiece } from '../build/grid';
 import { MODELS } from '../guide/models';
 import { loadRapier } from './rapier';
@@ -115,11 +116,12 @@ describe('impacts and friction (sounds)', () => {
 
   it('a heavy fall and a small drop are very different impacts', () => {
     const high = drop(2);
-    const low = drop(0.03);
+    const low = drop(0.01);
     expect(high[0].surface).toBe('table');
     // free fall: v = sqrt(2 g h)
     expect(high[0].speed).toBeGreaterThan(6);
-    expect(low[0].speed).toBeLessThan(1);
+    // ~0.56 m/s in theory
+    expect(low[0].speed).toBeLessThan(0.9);
   });
 
   it('a log sliding on the table rubs (no string of impacts)', () => {
@@ -137,6 +139,28 @@ describe('impacts and friction (sounds)', () => {
     }
     expect(rub).toBeGreaterThan(0.2);
     expect(hits.filter((h) => h.speed > 0.5)).toHaveLength(0);
+    w.dispose();
+  });
+});
+
+describe('drawing between physics steps', () => {
+  it('in slow motion, a falling piece moves on every frame (no stutter)', () => {
+    const w = new DemoWorld(R, [{ type: 'medium', ix: 0, iz: 0, y: 0, axis: 'x', uid: 1 }]);
+    const d = w.debris[0];
+    w.activate(d);
+    const p = d.body.translation();
+    d.body.setTranslation({ x: p.x, y: p.y + 2, z: p.z }, true);
+    run(w, 0.2);
+    const pos = new Vector3();
+    const rot = new Quaternion();
+    const ys: number[] = [];
+    // 14 frames at 60 fps, game time slowed down to 0.15: physics steps only every ~7 frames
+    for (let i = 0; i < 14; i++) {
+      w.step((1 / 60) * 0.15);
+      w.pose(d, pos, rot);
+      ys.push(pos.y);
+    }
+    for (let i = 1; i < ys.length; i++) expect(ys[i]).toBeLessThan(ys[i - 1]);
     w.dispose();
   });
 });

@@ -7,6 +7,7 @@ import { getDef, isRoofKind } from './pieces/catalog';
 import { bonk, chime, fanfare, pop, setMuted } from './audio/sfx';
 import { axisSideToRot } from './build/grid';
 import { loadRapier } from './destroy/rapier';
+import { DemoWorld } from './destroy/world';
 
 export type Mode = 'libre' | 'guide';
 export type Tool = 'build' | 'erase';
@@ -335,9 +336,26 @@ class AppState {
   // -------------------------------------------------------------------------
   // Demolition
 
-  /** Starts loading the physics engine (when the demolition menu opens). */
+  #warmed = false;
+
+  /**
+   * Loads the physics engine in the background, and warms it up: the very first physics
+   * world costs ~100 ms (engine code compiled on first use, collision shapes of the roof),
+   * better paid now than at the first explosion.
+   */
   preloadDemolition() {
-    void loadRapier().catch(() => {});
+    void loadRapier()
+      .then((R) => {
+        if (this.#warmed) return;
+        this.#warmed = true;
+        const pieces = this.build.pieces.length
+          ? this.build.pieces
+          : getModel(DEFAULT_MODEL_ID).steps.flatMap((s, i) => s.pieces.map((p, j) => ({ ...p, uid: i * 1000 + j + 1 })));
+        const run = () => new DemoWorld(R, pieces).dispose();
+        if ('requestIdleCallback' in window) requestIdleCallback(run, { timeout: 3000 });
+        else setTimeout(run, 100);
+      })
+      .catch(() => {});
   }
 
   /** Fires a demolition effect (starting the demolition if needed). */

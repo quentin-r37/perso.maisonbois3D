@@ -27,9 +27,24 @@ export function ac(): BaseAudioContext | null {
   return ctx;
 }
 
-/** To call on a user gesture (unlocks audio on iOS). */
+let warmed = false;
+
+/**
+ * To call on a user gesture (unlocks audio on iOS). Also prepares, when the browser is idle,
+ * what the big sounds need (noise buffers, reverb): computing them during an explosion
+ * would freeze a frame.
+ */
 export function unlockAudio() {
-  ac();
+  const c = ac();
+  if (!c || warmed) return;
+  warmed = true;
+  const warm = () => {
+    bus(c);
+    white(c);
+    brown(c);
+  };
+  if ('requestIdleCallback' in window) requestIdleCallback(warm, { timeout: 2000 });
+  else setTimeout(warm, 200);
 }
 
 /** Renders the sounds scheduled by `play` into a buffer (to check levels in dev). */

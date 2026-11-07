@@ -15,7 +15,9 @@ export type Quat = [number, number, number, number];
 /** "Toy" gravity: a bit stronger than real life, the falls are snappier. */
 export const GRAVITY = 9.81 * 1.6;
 const STEP = 1 / 60;
-const MAX_STEPS = 4;
+/** Catching up after a slow frame: at most 2 steps (beyond that, the simulation slows down
+ * rather than taking even longer to compute — the spiral that kills the frame rate). */
+const MAX_STEPS = 2;
 /** Colliders are shrunk a little so pieces that touch don't start interpenetrating. */
 const SKIN = 0.0012;
 /** Shrink of the probe shapes used to find the pieces that really overlap at the start. */
@@ -39,6 +41,7 @@ export interface Debris {
   neighbors: Debris[];
   /** Index in `DemoWorld.debris`. */
   index: number;
+  colliders: Collider[];
 }
 
 /** A continuous effect (tornado, quake): called on every physics step; returns false when it's over. */
@@ -125,6 +128,9 @@ function scaled(points: Float32Array, s: number): Float32Array {
   return out;
 }
 
+const qa = new Quaternion();
+const qb = new Quaternion();
+
 const pairKey = (a: number, b: number) => (a < b ? `${a}:${b}` : `${b}:${a}`);
 
 interface Probe {
@@ -155,6 +161,11 @@ export class DemoWorld {
 
   #acc = 0;
   #byBody = new Map<number, Debris>();
+  /** Collider handle -> piece (contact events give collider handles: no round trip to the engine). */
+  #byCollider = new Map<number, Debris>();
+  #floorCollider: number;
+  /** Pieces whose colliders go through the contact filter (calling it costs: only those that need it). */
+  #hooked = new Set<Debris>();
   #excluded = new Set<string>();
   /** Pairs that ignore each other until a given time (`unlock`). */
   #unlocked = new Map<string, number>();
@@ -164,6 +175,13 @@ export class DemoWorld {
   #speed = new Map<Debris, number>();
   /** Velocities of the pieces before the current step (x, y, z per piece). */
   #vel: Float32Array = new Float32Array(0);
+  /**
+   * Poses before and after the last physics step (position x3 + rotation x4 per piece), for
+   * drawing in between: the physics runs at 60 steps per game second, the screen can show
+   * more frames than that (slow motion: one step every ~7 frames; 120/144 Hz screens).
+   */
+  #prev: Float32Array = new Float32Array(0);
+  #cur: Float32Array = new Float32Array(0);
   /** Pairs in contact at the previous step (a pair that wasn't is a new impact). */
   #touching = new Set<string>();
   /** Sliding contacts of the last step, between pieces and on the table. */
@@ -177,11 +195,16 @@ export class DemoWorld {
     this.#opts = opts;
     this.world = new R.World({ x: 0, y: -GRAVITY, z: 0 });
     this.world.timestep = STEP;
+    // 2 iterations instead of 4: ~30% faster, the stacks stay stable (see the tests)
+    this.world.numSolverIterations = 2;
     this.#events = new R.EventQueue(true);
 
     // floor: kinematic so the quake can shake it
     this.floor = this.world.createRigidBody(R.RigidBodyDesc.kinematicPositionBased().setTranslation(1.5, -1, 1.5));
-    this.world.createCollider(R.ColliderDesc.cuboid(60, 1, 60).setFriction(0.9).setRestitution(0.1), this.floor);
+    this.#floorCollider = this.world.createCollider(
+      R.ColliderDesc.cuboid(60, 1, 60).setFriction(0.9).setRestitution(0.1),
+      this.floor
+    ).handle;
 
     const probes: Probe[] = [];
     const grown = (h: Vec3, m: number) => new R.Cuboid(...(h.map((v) => Math.max(v + m, 0.002)) as Vec3));
@@ -211,7 +234,8 @@ export class DemoWorld {
         active: false,
         lost: false,
         neighbors: [],
-        index: this.debris.length
+        index: this.debris.length,
+        colliders: []
       };
       sx += c[0];
       sz += c[2];
@@ -264,6 +288,8 @@ export class DemoWorld {
           .setActiveEvents(R.ActiveEvents.CONTACT_FORCE_EVENTS);
         const collider = this.world.createCollider(desc, body);
         probes.push({ collider, d, overlap, touch });
+        d.colliders.push(collider);
+        this.#byCollider.set(collider.handle, d);
       }
       d.mass = body.mass();
       // low threshold: resting and sliding contacts are reported too (friction sounds)
@@ -274,6 +300,9 @@ export class DemoWorld {
     }
 
     this.#vel = new Float32Array(this.debris.length * 3);
+    this.#cur = new Float32Array(this.debris.length * 7);
+    for (const d of this.debris) this.#cur.set([...d.home.p, ...d.home.q], d.index * 7);
+    this.#prev = this.#cur.slice();
     const n = Math.max(1, pieces.length);
     this.top = top;
     this.center = [sx / n, Math.max(0.3, top * 0.3), sz / n];
@@ -306,6 +335,7 @@ export class DemoWorld {
     // one step to build the query structures (every piece is fixed: nothing moves)
     this.world.step();
     const touching = new Set<string>();
+    const toHook = new Set<Debris>();
     for (const { collider, d, overlap, touch } of probes) {
       const query = (shape: Shape, f: (od: Debris) => void) =>
         this.world.intersectionsWithShape(
@@ -334,10 +364,19 @@ export class DemoWorld {
         const key = pairKey(d.body.handle, od.body.handle);
         if (!this.#excluded.has(key)) this.#pairs.push([d, od]);
         this.#excluded.add(key);
+        toHook.add(d);
+        toHook.add(od);
       });
     }
-    // every piece can be unlocked from its neighbors (`unlock`): all go through the filter
-    for (const { collider } of probes) collider.setActiveHooks(this.R.ActiveHooks.FILTER_CONTACT_PAIRS);
+    // (not inside the queries: the engine is borrowed while they run)
+    for (const d of toHook) this.#hook(d);
+  }
+
+  /** Makes the contacts of a piece go through the filter (overlapping or unlocked pairs). */
+  #hook(d: Debris) {
+    if (this.#hooked.has(d)) return;
+    this.#hooked.add(d);
+    for (const c of d.colliders) c.setActiveHooks(this.R.ActiveHooks.FILTER_CONTACT_PAIRS);
   }
 
   /**
@@ -416,6 +455,7 @@ export class DemoWorld {
    */
   unlock(d: Debris, seconds: number) {
     const until = this.time + seconds;
+    this.#hook(d);
     for (const n of d.neighbors) this.#unlocked.set(pairKey(d.body.handle, n.body.handle), until);
   }
 
@@ -440,6 +480,39 @@ export class DemoWorld {
     let n = 0;
     for (const s of this.#joints.values()) n += s.size;
     return n / 2;
+  }
+
+  #savePoses() {
+    this.#prev.set(this.#cur);
+    for (const d of this.debris) {
+      if (!d.active || d.lost) continue;
+      const t = d.body.translation();
+      const r = d.body.rotation();
+      const i = d.index * 7;
+      const c = this.#cur;
+      c[i] = t.x;
+      c[i + 1] = t.y;
+      c[i + 2] = t.z;
+      c[i + 3] = r.x;
+      c[i + 4] = r.y;
+      c[i + 5] = r.z;
+      c[i + 6] = r.w;
+    }
+  }
+
+  /**
+   * Pose of a piece to draw now: between the last two physics steps, according to the time
+   * left over (no stutter in slow motion or on fast screens).
+   */
+  pose(d: Debris, outP: Vector3, outQ: Quaternion) {
+    const k = Math.min(1, this.#acc / STEP);
+    const i = d.index * 7;
+    const a = this.#prev;
+    const b = this.#cur;
+    outP.set(a[i] + (b[i] - a[i]) * k, a[i + 1] + (b[i + 1] - a[i + 1]) * k, a[i + 2] + (b[i + 2] - a[i + 2]) * k);
+    qa.set(a[i + 3], a[i + 4], a[i + 5], a[i + 6]);
+    qb.set(b[i + 3], b[i + 4], b[i + 5], b[i + 6]);
+    outQ.slerpQuaternions(qa, qb, k);
   }
 
   addField(f: Field) {
@@ -468,7 +541,10 @@ export class DemoWorld {
       }
       this.world.step(this.#events, this.#hooks);
       this.#drainImpacts();
+      this.#savePoses();
     }
+    // too far behind (very slow frame): drop the rest rather than catching up forever
+    if (this.#acc > STEP) this.#acc = STEP;
     for (const d of this.debris) {
       if (!d.active || d.lost) continue;
       if (d.body.worldCom().y < -4) {
@@ -491,14 +567,15 @@ export class DemoWorld {
     const woken: Debris[] = [];
     const touching = new Set<string>();
     const slide = { wood: emptySlide(), table: emptySlide() };
-    const floor = this.floor.handle;
+    const floorC = this.#floorCollider;
+    const floorB = this.floor.handle;
 
     this.#events.drainContactForceEvents((e) => {
-      const b1 = this.world.getCollider(e.collider1())?.parent();
-      const b2 = this.world.getCollider(e.collider2())?.parent();
-      if (!b1 || !b2) return;
-      const d1 = this.#byBody.get(b1.handle);
-      const d2 = this.#byBody.get(b2.handle);
+      const c1 = e.collider1();
+      const c2 = e.collider2();
+      const d1 = this.#byCollider.get(c1);
+      const d2 = this.#byCollider.get(c2);
+      if ((!d1 && c1 !== floorC) || (!d2 && c2 !== floorC)) return;
       const force = e.totalForceMagnitude();
 
       for (const [d, o] of [
@@ -514,7 +591,7 @@ export class DemoWorld {
       }
 
       if (!d1?.active && !d2?.active) return;
-      const surface: Surface = b1.handle === floor || b2.handle === floor ? 'table' : 'wood';
+      const surface: Surface = d1 && d2 ? 'wood' : 'table';
       // contact normal ~ direction of the contact force
       const f = e.totalForce();
       const fl = Math.hypot(f.x, f.y, f.z) || 1;
@@ -526,7 +603,7 @@ export class DemoWorld {
       const v1 = this.#before(d1);
       const v2 = this.#before(d2);
       const approach = Math.abs((v1[0] - v2[0]) * nx + (v1[1] - v2[1]) * ny + (v1[2] - v2[2]) * nz);
-      const key = pairKey(b1.handle, b2.handle);
+      const key = pairKey(d1 ? d1.body.handle : floorB, d2 ? d2.body.handle : floorB);
       touching.add(key);
       const isNew = !this.#touching.has(key);
       // a new contact, or a contact that already existed but takes a real blow

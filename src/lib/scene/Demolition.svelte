@@ -1,7 +1,7 @@
 <script lang="ts">
   import { T, useTask, useThrelte } from '@threlte/core';
   import { onDestroy, untrack } from 'svelte';
-  import { Group, Quaternion, Vector3 } from 'three';
+  import { Group, Mesh, Quaternion, Vector3 } from 'three';
   import type { PlacedPiece } from '../build/grid';
   import { centerOf, transformOf } from '../build/transform';
   import { getGeometry } from '../pieces/geometry';
@@ -35,7 +35,20 @@
       homeY: centerOf(piece)[1]
     };
   });
-  const groups: Group[] = $state([]);
+  // plain three.js objects (not one component per piece: mounting ~70 components freezes a frame)
+  const root = new Group();
+  const groups = items.map((it) => {
+    const g = new Group();
+    g.position.set(...it.p);
+    g.quaternion.set(...it.q);
+    const m = new Mesh(it.geo.geometry, it.mats);
+    m.castShadow = true;
+    m.receiveShadow = true;
+    m.userData = { pick: 'debris' };
+    g.add(m);
+    root.add(g);
+    return g;
+  });
 
   let world: DemoWorld | null = null;
   let pending: DemoShot | null = null;
@@ -253,16 +266,9 @@
         g.visible = false;
         return;
       }
-      const tr = d.body.translation();
-      const rot = d.body.rotation();
-      g.position.set(tr.x, tr.y, tr.z);
-      g.quaternion.set(rot.x, rot.y, rot.z, rot.w);
+      world!.pose(d, g.position, g.quaternion);
     });
   });
 </script>
 
-{#each items as it, i (it.piece.uid)}
-  <T.Group bind:ref={groups[i]} position={it.p} quaternion={it.q}>
-    <T.Mesh geometry={it.geo.geometry} material={it.mats} castShadow receiveShadow userData={{ pick: 'debris' }} />
-  </T.Group>
-{/each}
+<T is={root} />
