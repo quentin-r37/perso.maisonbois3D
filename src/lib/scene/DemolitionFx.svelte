@@ -4,11 +4,7 @@
     Group,
     BoxGeometry,
     Color,
-    CanvasTexture,
-    PlaneGeometry,
-    Quaternion,
-    SRGBColorSpace,
-    Vector3,
+    IcosahedronGeometry,
     InstancedMesh,
     Mesh,
     MeshBasicMaterial,
@@ -26,10 +22,7 @@
    * at startup instead of freezing the first explosion.
    */
   let { active }: { active: boolean } = $props();
-  const { invalidate, renderer, camera } = useThrelte();
-  const facing = new Quaternion();
-  const spinQ = new Quaternion();
-  const VIEW_AXIS = new Vector3(0, 0, 1);
+  const { invalidate, renderer } = useThrelte();
 
   const rand = (a: number, b: number) => a + Math.random() * (b - a);
   const dummy = new Object3D();
@@ -88,29 +81,11 @@
   const splinters = Array.from({ length: NS }, blank);
   let si = 0;
 
-  // Dust puffs: billboards (2 triangles, always facing the camera) with a soft round texture
-  // and an unlit material. Big transparent puffs overlap a lot in the middle of a blast:
-  // lit spheres there cost the GPU a lot per pixel, these almost nothing.
-  function puffTexture(): CanvasTexture | null {
-    if (typeof document === 'undefined') return null;
-    const n = 64;
-    const c = document.createElement('canvas');
-    c.width = c.height = n;
-    const g = c.getContext('2d')!;
-    const grad = g.createRadialGradient(n / 2, n / 2, 0, n / 2, n / 2, n / 2);
-    grad.addColorStop(0, 'rgba(255,255,255,1)');
-    grad.addColorStop(0.45, 'rgba(255,255,255,0.75)');
-    grad.addColorStop(1, 'rgba(255,255,255,0)');
-    g.fillStyle = grad;
-    g.fillRect(0, 0, n, n);
-    const t = new CanvasTexture(c);
-    t.colorSpace = SRGBColorSpace;
-    return t;
-  }
+  // dust puffs
   const ND = 200;
   const dustMesh = new InstancedMesh(
-    new PlaneGeometry(1.3, 1.3),
-    new MeshBasicMaterial({ color: '#e3d3b6', map: puffTexture(), transparent: true, opacity: 0.6, depthWrite: false }),
+    new IcosahedronGeometry(0.5, 1),
+    new MeshStandardMaterial({ color: '#e6d6bb', roughness: 1, transparent: true, opacity: 0.5, depthWrite: false }),
     ND
   );
   dustMesh.frustumCulled = false;
@@ -219,7 +194,7 @@
         ring.position.set(x, 0.03, z);
         fx.flash = k;
         for (let i = 0; i < 110 * k; i++) spawnSplinter(x + rand(-0.4, 0.4), y + rand(-0.2, 0.4), z + rand(-0.4, 0.4), rand(3, 11) * (0.6 + k * 0.4));
-        for (let i = 0; i < 22 * k; i++) {
+        for (let i = 0; i < 34 * k; i++) {
           const th = Math.random() * Math.PI * 2;
           const sp = rand(1, 3.5) * k;
           spawnDust(x, Math.max(0.1, y * 0.5), z, Math.cos(th) * sp, rand(0.2, 1.2), Math.sin(th) * sp, rand(0.3, 0.6) * (0.5 + k * 0.5), rand(1.2, 2.2));
@@ -284,7 +259,6 @@
       dirty = false;
 
       // dust: slows down, rises a little, swells, then shrinks away
-      facing.copy(camera.current.quaternion);
       dust.forEach((p, i) => {
         if (p.age >= p.life) {
           if (p.hidden) return;
@@ -304,8 +278,7 @@
           dummy.scale.setScalar(Math.max(0, s));
         }
         dummy.position.set(p.x, p.y, p.z);
-        // facing the camera, each puff turned its own way around the view axis
-        dummy.quaternion.copy(facing).multiply(spinQ.setFromAxisAngle(VIEW_AXIS, p.rx));
+        dummy.rotation.set(p.rx, p.ry, 0);
         dummy.updateMatrix();
         dustMesh.setMatrixAt(i, dummy.matrix);
         dirty = true;
@@ -318,7 +291,7 @@
       const k = blast.power;
       {
         const t = Math.min(1, a / 0.45);
-        fire.scale.setScalar(0.2 + (1 - (1 - t) ** 3) * 1.7 * k);
+        fire.scale.setScalar(0.2 + (1 - (1 - t) ** 3) * 2.1 * k);
         fireMat.opacity = a < 0.45 ? 0.95 * (1 - t) ** 1.5 : 0;
         fire.visible = fireMat.opacity > 0.01;
       }
