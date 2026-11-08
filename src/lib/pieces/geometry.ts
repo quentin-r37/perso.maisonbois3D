@@ -320,14 +320,20 @@ function windowParts(L: number, hq: number): Part[] {
   const i1 = x1 - POST;
   const j0 = 0.1;
   const j1 = H - 0.1;
-  const bar = 0.025;
-  for (let i = 1; i < 5; i++) {
-    const x = i0 + ((i1 - i0) * i) / 5;
-    parts.push(rbox(x - bar / 2, x + bar / 2, j0, j1, -bar / 2, bar / 2, 'dark', 0));
+  // white flat glazing bars: two sashes split by a wider central mullion,
+  // each sash with one thin upright and two thin rails.
+  const bar = 0.035;
+  const barD = 0.015;
+  const mid = (i0 + i1) / 2;
+  const mull = 0.07;
+  const mullD = 0.05;
+  parts.push(rbox(mid - mull / 2, mid + mull / 2, j0, j1, -mullD / 2, mullD / 2, 'white', 0.01));
+  for (const x of [(i0 + mid) / 2, (mid + i1) / 2]) {
+    parts.push(rbox(x - bar / 2, x + bar / 2, j0, j1, -barD / 2, barD / 2, 'white', 0));
   }
-  for (let j = 1; j < 4; j++) {
-    const y = j0 + ((j1 - j0) * j) / 4;
-    parts.push(rbox(i0, i1, y - bar / 2, y + bar / 2, -bar / 2, bar / 2, 'dark', 0));
+  for (let j = 1; j < 3; j++) {
+    const y = j0 + ((j1 - j0) * j) / 3;
+    parts.push(rbox(i0, i1, y - bar / 2, y + bar / 2, -barD / 2, barD / 2, 'white', 0));
   }
   // red shutters opened outward (+z), with a little fir tree cut out.
   // One step beside the frame is the chalet corner, whose crossing heads stick out by
