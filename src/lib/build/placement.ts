@@ -1,6 +1,6 @@
 import { getDef, isRoofKind } from '../pieces/catalog';
-import { G, Q, type PieceSpec, type Side } from './grid';
-import { contactsOf, dropHeight, specKey, validate, type Contact, type PointIndex, type Validation } from './snap';
+import { G, Q, SUB, alongDir, type PieceSpec, type Side } from './grid';
+import { contactsOf, dropHeight, notchesOf, specKey, validate, type Contact, type PointIndex, type Validation } from './snap';
 import { PLANK_W, RIDGE_DIV, nearestBatten, roofSpec, type Roof } from './roof';
 import { boxesCenter, centerOf } from './transform';
 
@@ -151,20 +151,62 @@ export function snapToLock(
   if (!getDef(spec.type).notches?.length) return null;
   const heldKey = held && held.type === spec.type ? specKey(held) : null;
   let best: { g: Ghost; score: number } | null = null;
+  const spots: PieceSpec[] = [];
   for (let dx = -SNAP_REACH; dx <= SNAP_REACH; dx++)
-    for (let dz = -SNAP_REACH; dz <= SNAP_REACH; dz++) {
-      const s: PieceSpec = { ...spec, ix: spec.ix + dx, iz: spec.iz + dz };
-      s.y = dropHeight(view.index, s);
-      const sticky = heldKey === specKey(s);
-      const [cx, cz] = boxesCenter(s);
-      const d = Math.hypot(cx - aim[0], cz - aim[1]);
-      if (d > (sticky ? SNAP_KEEP : SNAP_RADIUS)) continue;
-      const g = evaluate(s, view);
-      if (!g.ok || !g.locks?.length) continue;
-      const score = d - (sticky ? 0.4 * G : 0) - 0.15 * G * g.locks.length;
-      if (!best || score < best.score) best = { g, score };
-    }
+    for (let dz = -SNAP_REACH; dz <= SNAP_REACH; dz++) spots.push({ ...spec, ix: spec.ix + dx, iz: spec.iz + dz });
+  const offGridFrom = spots.length;
+  spots.push(...offGridSpots(spec, aim, view));
+  for (const [i, s] of spots.entries()) {
+    s.y = dropHeight(view.index, s);
+    const sticky = heldKey === specKey(s);
+    // a log laid across the crenels is caught wherever it is pointed along its length
+    const d = i >= offGridFrom ? distanceToLog(s, aim) : Math.hypot(...sub(boxesCenter(s), aim));
+    if (d > (sticky ? SNAP_KEEP : SNAP_RADIUS)) continue;
+    const g = evaluate(s, view);
+    if (!g.ok || !g.locks?.length) continue;
+    const score = d - (sticky ? 0.4 * G : 0) - 0.15 * G * g.locks.length;
+    if (!best || score < best.score) best = { g, score };
+  }
   return best?.g ?? null;
+}
+
+const sub = (a: readonly [number, number], b: readonly [number, number]): [number, number] => [a[0] - b[0], a[1] - b[1]];
+
+/** Distance from `aim` to the line of a log, between its end notches. */
+function distanceToLog(spec: PieceSpec, aim: readonly [number, number]): number {
+  const n = notchesOf(getDef(spec.type), spec.side);
+  const [ax, az] = alongDir(spec.axis);
+  const t0 = Math.min(...n);
+  const t1 = Math.max(...n);
+  const t = Math.max(t0, Math.min(t1, ((aim[0] / G - spec.ix) * ax + (aim[1] / G - spec.iz) * az)));
+  return Math.hypot(aim[0] - (spec.ix + ax * t) * G, aim[1] - (spec.iz + az * t) * G);
+}
+
+const offGrid = (v: number) => Math.abs(v / G - Math.round(v / G)) > 1e-3;
+
+/**
+ * Spots between the grid points where one of the piece's notches falls into an
+ * off-grid notch of a piece in place (the crenels of a crenel log): a log laid across
+ * the crenels goes there, and only through the magnet.
+ */
+function offGridSpots(spec: PieceSpec, aim: readonly [number, number], view: BuildView): PieceSpec[] {
+  const def = getDef(spec.type);
+  const [ax, az] = alongDir(spec.axis);
+  const reach = def.length * G + SNAP_RADIUS;
+  const out: PieceSpec[] = [];
+  for (const b of view.index.boxes) {
+    if (!b.notch) continue;
+    const cx = (b.x0 + b.x1) / 2;
+    const cz = (b.z0 + b.z1) / 2;
+    if (!offGrid(cx) && !offGrid(cz)) continue;
+    if (Math.hypot(cx - aim[0], cz - aim[1]) > reach) continue;
+    for (const n of notchesOf(def, spec.side)) {
+      const ix = Math.round((cx / G - ax * n) * SUB) / SUB;
+      const iz = Math.round((cz / G - az * n) * SUB) / SUB;
+      out.push({ ...spec, ix, iz });
+    }
+  }
+  return out;
 }
 
 /**

@@ -9,8 +9,14 @@ const drop = (pieces: PieceSpec[], spec: Omit<PieceSpec, 'y'>) =>
   dropHeight(buildIndex(pieces), { ...spec, y: 0 });
 
 describe('piece catalogue', () => {
-  it('only three kinds of logs: small, medium, long', () => {
-    expect(CATALOG.filter((d) => d.kind === 'log').map((d) => d.id)).toEqual(['small', 'medium', 'long']);
+  it('only three kinds of plain logs: small, medium, long', () => {
+    const plain = CATALOG.filter((d) => d.kind === 'log' && !d.teeth && d.cut === undefined);
+    expect(plain.map((d) => d.id)).toEqual(['small', 'medium', 'long']);
+  });
+
+  it('castle: one crenel log, two cut logs for the arrow slit', () => {
+    expect(CATALOG.filter((d) => d.teeth).map((d) => d.id)).toEqual(['crenel']);
+    expect(CATALOG.filter((d) => d.cut !== undefined).map((d) => d.id)).toEqual(['cut-slit', 'cut-wide']);
   });
 
   it('the long log is not two mediums: its middle notch is off-center', () => {
@@ -252,4 +258,51 @@ it('two half floors cover a 5 × 5 room, meeting in the middle', () => {
   const boxes = [...worldBoxes(front), ...worldBoxes(back)];
   expect(Math.min(...boxes.map((b) => b.z0))).toBeCloseTo(0.2);
   expect(Math.max(...boxes.map((b) => b.z1))).toBeCloseTo(5 * G - 0.2);
+});
+
+describe('castle pieces', () => {
+  /** Square 5 × 5 of medium logs: X courses at 0, 4…, Z courses at 2, 6… */
+  const square = (courses: number): PieceSpec[] => {
+    const out: PieceSpec[] = [];
+    for (let k = 0; k < courses; k++) {
+      for (const iz of [0, 5]) out.push({ type: 'medium', ix: 0, iz, y: 4 * k, axis: 'x' });
+      for (const ix of [0, 5]) out.push({ type: 'medium', ix, iz: 0, y: 4 * k + 2, axis: 'z' });
+    }
+    return out;
+  };
+
+  it('crenel logs top both walls, crossing at the corners like plain logs', () => {
+    const pieces = square(2);
+    expect(drop(pieces, { type: 'crenel', ix: 0, iz: 0, axis: 'x' })).toBe(8);
+    const withX = [
+      ...pieces,
+      { type: 'crenel', ix: 0, iz: 0, y: 8, axis: 'x' },
+      { type: 'crenel', ix: 0, iz: 5, y: 8, axis: 'x' }
+    ] as PieceSpec[];
+    expect(drop(withX, { type: 'crenel', ix: 0, iz: 0, axis: 'z' })).toBe(10);
+  });
+
+  it('a crenel log is a plain log with three standard notches cut in its top', () => {
+    const boxes = worldBoxes({ type: 'crenel', ix: 0, iz: 0, y: 0, axis: 'x' });
+    expect(Math.max(...boxes.map((b) => b.y1))).toBe(4);
+    const crenels = boxes.filter((b) => b.notch && b.y0 === 0);
+    expect(crenels.map((b) => b.y1)).toEqual([3, 3, 3]);
+    for (const b of crenels) expect(b.x1 - b.x0).toBeCloseTo(0.4);
+    expect(crenels.map((b) => (b.x0 + b.x1) / 2 / G)).toEqual([1.25, 2.5, 3.75].map((v) => expect.closeTo(v)));
+  });
+
+  it('two cut logs facing each other leave the slit in the middle of a medium wall', () => {
+    const pieces = square(1);
+    const left: PieceSpec = { type: 'cut-slit', ix: 0, iz: 0, y: 4, axis: 'x', side: 1 };
+    const right: PieceSpec = { type: 'cut-slit', ix: 0, iz: 0, y: 4, axis: 'x', side: -1 };
+    expect(drop(pieces, left)).toBe(4);
+    expect(drop([...pieces, left], right)).toBe(4);
+    const notches = (s: PieceSpec) => pointsOf(s).filter((o) => o.notch).map((o) => o.x);
+    expect(notches(left)).toEqual([0]);
+    expect(notches(right)).toEqual([5]);
+    const ends = [left, right].map((s) => worldBoxes(s).filter((b) => !b.notch));
+    const gap = Math.min(...ends[1].map((b) => b.x0)) - Math.max(...ends[0].map((b) => b.x1));
+    expect(gap).toBeCloseTo(0.24);
+    expect(gap).toBeLessThan(G);
+  });
 });

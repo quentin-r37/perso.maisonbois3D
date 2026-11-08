@@ -16,6 +16,7 @@ import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeom
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { getDef, type Paint } from './catalog';
 import { FLOOR_MARGIN, G, LOG_W, OVERHANG, Q, floorNotchZ, halfFloorEndZ, type PieceSpec } from '../build/grid';
+import { isUpsideDown, localBoxes } from '../build/volumes';
 import {
   BATTEN_F,
   battenLength,
@@ -187,6 +188,26 @@ function logParts(notches: number[], hq: number, topNotch: number, bottomNotch: 
   });
   parts.push(rbox(last + W / 2, last + OVERHANG, 0, H, z0, z1, paint, 0.025));
   return parts;
+}
+
+/** Crenel log: a plain log with extra notches cut in its top (same outline as its boxes). */
+function crenelParts(paint: Paint, type: string, upside: boolean): Part[] {
+  return localBoxes(type, upside).map((b) =>
+    b.notch
+      ? rbox(b.x0, b.x1, b.y0 * Q, b.y1 * Q, b.z0 + 0.008, b.z1 - 0.008, paint, 0.015)
+      : rbox(b.x0, b.x1, b.y0 * Q, b.y1 * Q, b.z0, b.z1, paint, 0.02)
+  );
+}
+
+/** Cut log (arrow slit): head and notch at the corner, flat sawn end at `cut`. */
+function cutLogParts(cut: number, hq: number, top: number, bottom: number, paint: Paint): Part[] {
+  const H = hq * Q;
+  const W = LOG_W;
+  return [
+    rbox(-OVERHANG, -W / 2, 0, H, -W / 2, W / 2, paint, 0.025),
+    rbox(-W / 2, W / 2, bottom * Q, H - top * Q, -W / 2 + 0.008, W / 2 - 0.008, paint, 0.015),
+    rbox(W / 2, cut, 0, H, -W / 2, W / 2, paint, 0.012)
+  ];
 }
 
 // ---------------------------------------------------------------------------
@@ -613,7 +634,7 @@ export function geometryKey(spec: GeoSpec): string {
     case 'ridge':
       return `${spec.type}:${spec.param}`;
     default:
-      return spec.type;
+      return isUpsideDown(spec) ? `${spec.type}:upside` : spec.type;
   }
 }
 
@@ -625,7 +646,9 @@ export function getGeometry(spec: GeoSpec): PieceGeometry {
   let parts: Part[];
   switch (def.kind) {
     case 'log':
-      parts = logParts(def.notches ?? [0], def.h, def.topNotch, def.bottomNotch);
+      if (def.cut !== undefined) parts = cutLogParts(def.cut, def.h, def.topNotch, def.bottomNotch, def.paint);
+      else if (def.teeth) parts = crenelParts(def.paint, spec.type, isUpsideDown(spec));
+      else parts = logParts(def.notches ?? [0], def.h, def.topNotch, def.bottomNotch);
       break;
     case 'insert':
       parts = spec.type === 'door' ? doorParts(def.length, def.h) : windowParts(def.length, def.h);

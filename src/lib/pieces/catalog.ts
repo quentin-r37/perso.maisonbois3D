@@ -1,5 +1,7 @@
+import { G } from '../build/grid';
+
 export type Kind = 'log' | 'insert' | 'gable' | 'floor' | 'decor' | 'batten' | 'roof' | 'ridge' | 'chimney';
-export type Paint = 'wood' | 'light' | 'orange' | 'white' | 'green' | 'red' | 'yellow' | 'dark' | 'blue' | 'skin' | 'hair';
+export type Paint = 'wood' | 'black' | 'light' | 'orange' | 'white' | 'green' | 'red' | 'yellow' | 'dark' | 'blue' | 'skin' | 'hair';
 export type Category = 'rondins' | 'ouvertures' | 'toit' | 'deco';
 
 export interface PieceDef {
@@ -21,7 +23,17 @@ export interface PieceDef {
   paint: Paint;
   /** Number of distinct rotations (1 = none, 2 = X/Z axis, 4 = axis + facing). */
   rotations: 1 | 2 | 4;
+  /** Crenel log: depth (in Q) of the extra notches cut in the top of the log. */
+  teeth?: number;
+  /** Cut log (arrow slit): local x (world units) of its flat, sawn end. */
+  cut?: number;
 }
+
+/** Arrow slit, in world units: width of the upright and of the arms of the cross. */
+const SLIT = 0.24;
+const CROSS_ARM = 0.9;
+/** Middle of a medium wall (world units from the corner notch). */
+const MID = (5 * G) / 2;
 
 const base = { depth: 0, h: 0, topNotch: 0, bottomNotch: 0, length: 0, rotations: 1 as const };
 
@@ -67,6 +79,57 @@ export const CATALOG: PieceDef[] = [
     length: 8,
     notches: [0, 3, 8],
     h: 4,
+    topNotch: 1,
+    bottomNotch: 1,
+    paint: 'wood',
+    rotations: 4
+  },
+  // Castle. The crenel log is nothing more than a medium log with three more notches cut
+  // in its top (standard notches, no deeper), evenly spaced between the corners.
+  // Facing -1 = laid upside down: the crenels open underneath, over the logs laid across.
+  {
+    ...base,
+    id: 'crenel',
+    name: 'Crenel log',
+    kind: 'log',
+    category: 'rondins',
+    length: 5,
+    notches: [0, 5],
+    h: 4,
+    teeth: 1,
+    topNotch: 1,
+    bottomNotch: 1,
+    paint: 'black',
+    rotations: 4
+  },
+  // Arrow slit: two cut logs (one notch at the corner, sawn off before the middle of a
+  // medium wall), laid in pairs facing each other. The slit one leaves a narrow gap
+  // (the upright of the cross), the wide one the arms of the cross.
+  {
+    ...base,
+    id: 'cut-slit',
+    name: 'Cut log (slit)',
+    kind: 'log',
+    category: 'rondins',
+    length: 5,
+    notches: [0],
+    h: 4,
+    cut: MID - SLIT / 2,
+    topNotch: 1,
+    bottomNotch: 1,
+    paint: 'wood',
+    rotations: 4
+  },
+  {
+    ...base,
+    id: 'cut-wide',
+    name: 'Cut log (wide)',
+    kind: 'log',
+    category: 'rondins',
+    length: 5,
+    notches: [0],
+    h: 4,
+    cut: MID - CROSS_ARM / 2,
     topNotch: 1,
     bottomNotch: 1,
     paint: 'wood',

@@ -39,6 +39,54 @@ function logBoxes(notches: number[], h: number, top: number, bottom: number): Lo
   return out;
 }
 
+/**
+ * Crenels of a crenel log, as [x0, x1] spans (local x, world units): standard notches
+ * (as wide as a log), cut in the top only, evenly spaced between two corner notches
+ * (three on a medium log, at a quarter, half and three quarters).
+ */
+export function crenelSpans(notches: number[]): [number, number][] {
+  const xs = [...notches].sort((a, b) => a - b).map((k) => k * G);
+  const out: [number, number][] = [];
+  for (let i = 0; i < xs.length - 1; i++) {
+    const n = Math.max(2, Math.round((xs[i + 1] - xs[i]) / (1.25 * G)));
+    for (let k = 1; k < n; k++) {
+      const x = xs[i] + ((xs[i + 1] - xs[i]) * k) / n;
+      out.push([x - W2, x + W2]);
+    }
+  }
+  return out;
+}
+
+/** Plain log boxes, with the full sections lowered by `depth` over the crenels (notches cut in the top). */
+function crenelBoxes(notches: number[], h: number, depth: number, top: number, bottom: number): LocalBox[] {
+  const gaps = crenelSpans(notches);
+  const out: LocalBox[] = [];
+  for (const b of logBoxes(notches, h, top, bottom)) {
+    if (b.notch) {
+      out.push(b);
+      continue;
+    }
+    let x = b.x0;
+    for (const [g0, g1] of gaps) {
+      if (g1 <= b.x0 || g0 >= b.x1) continue;
+      if (g0 > x) out.push({ ...b, x0: x, x1: g0 });
+      out.push({ ...b, x0: g0, x1: g1, y1: h - depth, notch: true });
+      x = g1;
+    }
+    if (x < b.x1) out.push({ ...b, x0: x, x1: b.x1 });
+  }
+  return out;
+}
+
+/** Cut log: head and notch at the corner, then the log runs on to its sawn end at `cut`. */
+function cutLogBoxes(cut: number, h: number, top: number, bottom: number): LocalBox[] {
+  return [
+    { x0: -OVERHANG, x1: -W2, z0: -W2, z1: W2, y0: 0, y1: h },
+    { x0: -W2, x1: W2, z0: -W2, z1: W2, y0: bottom, y1: h - top, notch: true },
+    { x0: W2, x1: cut, z0: -W2, z1: W2, y0: 0, y1: h }
+  ];
+}
+
 function gableBoxes(W: number): LocalBox[] {
   const Ww = W * G;
   const t = GABLE_T / 2;
@@ -58,14 +106,27 @@ function gableBoxes(W: number): LocalBox[] {
 
 const localCache = new Map<string, LocalBox[]>();
 
-/** Boxes of a piece type in its local frame (along +X, centered in Z). */
-export function localBoxes(type: string): LocalBox[] {
-  let b = localCache.get(type);
+/** A crenel log turned upside down (facing -1): its crenels open underneath. */
+export function isUpsideDown(spec: Pick<PieceSpec, 'type' | 'side'>): boolean {
+  return !!getDef(spec.type).teeth && spec.side === -1;
+}
+
+/** Boxes of a piece type in its local frame (along +X, centered in Z), upside down if asked. */
+export function localBoxes(type: string, upside = false): LocalBox[] {
+  const key = upside ? `${type}:upside` : type;
+  let b = localCache.get(key);
   if (b) return b;
   const def = getDef(type);
+  if (upside) {
+    b = localBoxes(type).map((o) => ({ ...o, y0: def.h - o.y1, y1: def.h - o.y0 }));
+    localCache.set(key, b);
+    return b;
+  }
   switch (def.kind) {
     case 'log':
-      b = logBoxes(def.notches ?? [0], def.h, def.topNotch, def.bottomNotch);
+      if (def.cut !== undefined) b = cutLogBoxes(def.cut, def.h, def.topNotch, def.bottomNotch);
+      else if (def.teeth) b = crenelBoxes(def.notches ?? [0], def.h, def.teeth, def.topNotch, def.bottomNotch);
+      else b = logBoxes(def.notches ?? [0], def.h, def.topNotch, def.bottomNotch);
       break;
     case 'insert':
       b = [{ x0: FRAME_X0 + 0.01, x1: def.length * G - FRAME_X0 - 0.01, z0: -W2, z1: W2, y0: 0, y1: def.h }];
@@ -115,7 +176,7 @@ export function worldBoxes(spec: PieceSpec): WorldBox[] {
   const L = def.length * G;
   const D = def.depth * G;
   const flip = def.rotations === 4 && spec.side === -1;
-  return localBoxes(spec.type).map((b) => {
+  return localBoxes(spec.type, isUpsideDown(spec)).map((b) => {
     // facing -1: rotated 180° around the center of the piece
     let lx0 = b.x0;
     let lx1 = b.x1;

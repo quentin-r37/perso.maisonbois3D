@@ -94,7 +94,8 @@ export function renderThumbnails(size = 112): Record<string, string> {
   const dir = new Vector3(0.9, 0.75, 1.15).normalize();
 
   for (const def of CATALOG) {
-    const g = getGeometry({ type: def.id, param: 5, param2: 5, side: -1, slot: 1 });
+    // logs right way up (a crenel log facing -1 is upside down); roof pieces on one slope
+    const g = getGeometry({ type: def.id, param: 5, param2: 5, side: def.kind === 'log' ? 1 : -1, slot: 1 });
     const mesh = new Mesh(g.geometry, materialsFor(g.paints));
     if (def.kind === 'roof' || def.kind === 'ridge') mesh.position.y = 0;
     scene.add(mesh);

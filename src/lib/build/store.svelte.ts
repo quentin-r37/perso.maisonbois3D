@@ -1,4 +1,4 @@
-import type { PieceSpec, PlacedPiece } from './grid';
+import { onSubGrid, type PieceSpec, type PlacedPiece } from './grid';
 import { buildIndex, normalize, specKey } from './snap';
 import { findRoofs } from './roof';
 import { hasDef } from '../pieces/catalog';
@@ -31,8 +31,8 @@ export function sanitizeSpecs(data: unknown): PieceSpec[] {
         typeof p === 'object' &&
         typeof p.type === 'string' &&
         hasDef(p.type) &&
-        Number.isInteger(p.ix) &&
-        Number.isInteger(p.iz) &&
+        onSubGrid(p.ix) &&
+        onSubGrid(p.iz) &&
         Number.isInteger(p.y) &&
         (p.axis === 'x' || p.axis === 'z')
     )

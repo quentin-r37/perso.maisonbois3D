@@ -61,6 +61,13 @@ export interface PlacedPiece extends PieceSpec {
   uid: number;
 }
 
+/**
+ * Off-grid positions fall on a quarter step: the crenels of a crenel log are there,
+ * and a log laid across them takes their position (ix/iz multiples of 1/SUB).
+ */
+export const SUB = 4;
+export const onSubGrid = (v: number) => Number.isInteger(v * SUB);
+
 export const pkey = (ix: number, iz: number) => `${ix},${iz}`;
 
 /** Direction along the axis. */

@@ -102,3 +102,48 @@ describe('parallax', () => {
     expect(resolveAim('medium', 0, hit, room)).toEqual([p.x, p.z]);
   });
 });
+
+describe('crenels', () => {
+  /** Two crenel logs facing each other, 5 G apart (front and back of a tower). */
+  const crenels: PieceSpec[] = [
+    { type: 'crenel', ix: 0, iz: 0, y: 0, axis: 'x' },
+    { type: 'crenel', ix: 0, iz: 5, y: 0, axis: 'x' }
+  ];
+  const cv = viewOf(crenels);
+
+  it('a medium log laid across is pulled into the crenels and locks at both ends', () => {
+    for (const ix of [1, 2, 4]) {
+      const cand: PieceSpec = { type: 'medium', ix, iz: 0, y: 0, axis: 'z' };
+      cand.y = dropHeight(cv.index, cand);
+      // on the grid it lands on the edge of a crenel: refused or loose, never locked
+      const g = evaluate(cand, cv);
+      expect(!g.ok || g.loose).toBe(true);
+      const snapped = snapToLock(cand, boxesCenter(cand), cv);
+      expect(snapped?.locks).toHaveLength(2);
+      expect(snapped?.spec.y).toBe(2);
+      expect([1.25, 2.5, 3.75]).toContain(snapped?.spec.ix);
+    }
+  });
+
+  it('upside down, a crenel log caps the logs laid across and rests on the crenel log below', () => {
+    const across = [1.25, 2.5, 3.75].map((ix): PieceSpec => ({ type: 'medium', ix, iz: 0, y: 2, axis: 'z' }));
+    const v = viewOf([...crenels, ...across]);
+    const cap: PieceSpec = { type: 'crenel', ix: 0, iz: 0, y: 0, axis: 'x', side: -1 };
+    cap.y = dropHeight(v.index, cap);
+    expect(cap.y).toBe(4);
+    const g = evaluate(cap, v);
+    expect(g.ok).toBe(true);
+    expect(g.locks).toHaveLength(3);
+    // right way up it would sit on the logs laid across
+    const flat: PieceSpec = { ...cap, side: 1 };
+    expect(dropHeight(v.index, flat)).toBe(5);
+  });
+
+  it('it is caught when pointed near one end, not only in the middle', () => {
+    const cand: PieceSpec = { type: 'medium', ix: 2, iz: 0, y: 0, axis: 'z' };
+    cand.y = dropHeight(cv.index, cand);
+    // pointing just inside the front crenel log, over the middle crenel
+    const snapped = snapToLock(cand, [2.5 * G, 0.4], cv);
+    expect(snapped?.spec).toMatchObject({ ix: 2.5, iz: 0, y: 2 });
+  });
+});

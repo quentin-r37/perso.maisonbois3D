@@ -4,7 +4,7 @@ import { Quaternion, Vector3 } from 'three';
 import type { PlacedPiece } from '../build/grid';
 import { Q } from '../build/grid';
 import { centerOf, transformOf } from '../build/transform';
-import { localBoxes } from '../build/volumes';
+import { isUpsideDown, localBoxes } from '../build/volumes';
 import { getDef, isRoofKind } from '../pieces/catalog';
 import { geometryKey, getGeometry } from '../pieces/geometry';
 
@@ -241,7 +241,7 @@ export class DemoWorld {
       sz += c[2];
 
       const def = getDef(piece.type);
-      const boxes = isRoofKind(def.kind) ? [] : localBoxes(piece.type);
+      const boxes = isRoofKind(def.kind) ? [] : localBoxes(piece.type, isUpsideDown(piece));
       const descs: { desc: RAPIER.ColliderDesc; overlap: Shape; touch: Shape }[] = [];
       if (boxes.length) {
         // logs, gables, floors…: the same boxes as the stacking solver, notches included
