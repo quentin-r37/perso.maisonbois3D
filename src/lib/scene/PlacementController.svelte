@@ -90,8 +90,22 @@
       app.hoverUid = pieceAt(e.clientX, e.clientY);
       return;
     }
+    app.freePlace = e.shiftKey;
     app.updateFromHit(hitAt(e.clientX, e.clientY, wantsRoof()));
   }
+
+  /** Shift pressed/released without moving: drop or restore the magnet right away. */
+  function setFree(free: boolean) {
+    if (app.freePlace === free) return;
+    app.freePlace = free;
+    if (!app.pending && !app.demo.active) {
+      app.refreshGhost();
+      invalidate();
+    }
+  }
+  const onKeyDown = (e: KeyboardEvent) => e.key === 'Shift' && setFree(true);
+  const onKeyUp = (e: KeyboardEvent) => e.key === 'Shift' && setFree(false);
+  const onBlur = () => setFree(false);
 
   function onDown(e: PointerEvent) {
     unlockAudio();
@@ -205,7 +219,13 @@
     window.addEventListener('pointercancel', onCancel);
     dom.addEventListener('pointerleave', onLeave);
     dom.addEventListener('contextmenu', onContext);
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('blur', onBlur);
     return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('blur', onBlur);
       dom.removeEventListener('pointerdown', onDown);
       dom.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);

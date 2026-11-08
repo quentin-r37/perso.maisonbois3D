@@ -6,6 +6,25 @@ export interface ChaletPlan {
   walls: Wall[];
   /** Top height of the X walls (in Q): X courses go from 0 to xTop-4. */
   xTop: number;
+  /**
+   * Floor between two storeys, laid at the height of a side course (zy): that course is
+   * only small logs at the corners, the floor boards rest on the side walls between them.
+   */
+  floor?: { y: number; pieces: PieceSpec[] };
+  /** Hint of the first course (default: front and back on the table). */
+  firstHint?: string;
+}
+
+/** Small logs at both ends of a wall (the corners), at height y. */
+function cornerCourse(wall: Wall, y: number): PieceSpec[] {
+  const [ax, az] = wall.axis === 'x' ? [1, 0] : [0, 1];
+  return [0, wall.length].map((k) => ({
+    type: 'small',
+    ix: wall.ix + ax * k,
+    iz: wall.iz + az * k,
+    y,
+    axis: wall.axis
+  }));
 }
 
 /**
@@ -49,12 +68,27 @@ export function wallSteps(plan: ChaletPlan, firstCourse = 1): Step[] {
   push(
     `Course ${course++} — front and back`,
     xWalls.flatMap((w) => wallCourse(w, 0)),
-    'Front and back first, directly on the table.'
+    plan.firstHint ?? 'Front and back first, directly on the table.'
   );
   flushOpenings('x', 0);
 
   for (let y = 4; y < plan.xTop; y += 4) {
     const zy = y - 2;
+    if (plan.floor?.y === zy) {
+      push(
+        `Course ${course} — the floor`,
+        plan.floor.pieces,
+        'The floor boards rest on the side walls: the ground floor is finished!'
+      );
+      push(
+        `Course ${course} — the corners`,
+        zWalls.flatMap((w) => cornerCourse(w, zy)),
+        'Only small logs at the corners: the edge of the floor shows between them.'
+      );
+      push(`Course ${course++} — front and back`, xWalls.flatMap((w) => wallCourse(w, y)));
+      flushOpenings('x', y);
+      continue;
+    }
     push(
       `Course ${course} — sides`,
       zWalls.flatMap((w) => wallCourse(w, zy)),

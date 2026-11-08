@@ -1,10 +1,17 @@
 import type { Model } from './helpers';
+import { barn } from './barn';
 import { cabane } from './cabane';
+import { hamlet } from './hamlet';
 import { longChalet } from './long-chalet';
 import { petitChalet } from './petit-chalet';
+import { porchChalet } from './porch-chalet';
+import { sheepfold } from './sheepfold';
+import { twoStorey } from './two-storey';
 
 /** Ordered from the easiest to the biggest. The first one is the default. */
-export const MODELS: Model[] = [petitChalet, cabane, longChalet].sort((a, b) => a.level - b.level);
+export const MODELS: Model[] = [petitChalet, cabane, barn, porchChalet, longChalet, sheepfold, twoStorey, hamlet].sort(
+  (a, b) => a.level - b.level
+);
 
 /** The model the booklet opened on before there was a choice (its saved progress belongs to it). */
 export const DEFAULT_MODEL_ID = petitChalet.id;

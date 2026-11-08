@@ -142,7 +142,7 @@
       <button class="round" onclick={() => ((app.pending = false), (app.ghost = null))} aria-label="Cancel">
         <Icon name="close" size={22} />
       </button>
-      <button class="place" class:bad={!app.ghost.ok} onclick={() => app.placeGhost()}>
+      <button class="place" class:bad={!app.ghost.ok} class:loose={app.ghost.ok && app.ghost.loose} onclick={() => app.placeGhost()}>
         <Icon name="check" size={22} /> Place
       </button>
     </div>
@@ -159,6 +159,10 @@
       <span class="chip erase">Eraser: {coarse ? 'tap' : 'click'} a piece to remove it</span>
     {:else if app.ghost && !app.ghost.ok && app.ghost.reason}
       <span class="chip warn">✋ {app.ghost.reason}</span>
+    {:else if app.ghost?.loose}
+      <span class="chip loose">
+        Not in a notch: it just sits on top{#if !coarse} · Shift to place it anyway{/if}
+      </span>
     {:else if app.ghost?.locks?.length}
       <span class="chip good">✓ The notches lock together</span>
     {:else if selectedName}
@@ -269,6 +273,9 @@
     color: #fff;
     cursor: pointer;
   }
+  .place.loose {
+    background: #e89a10;
+  }
   .place.bad {
     background: #b9a998;
   }
@@ -352,6 +359,10 @@
   .chip.warn {
     color: #fff;
     background: #e2683c;
+  }
+  .chip.loose {
+    color: #4a3000;
+    background: #ffc84a;
   }
   .chip.good {
     color: #fff;

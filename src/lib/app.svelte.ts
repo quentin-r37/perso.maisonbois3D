@@ -1,7 +1,18 @@
 import { BuildStore, sanitizeSpecs, writeStorage } from './build/store.svelte';
 import type { PieceSpec, PlacedPiece } from './build/grid';
 import { canRemove, dropHeight, specKey } from './build/snap';
-import { candidateFromHit, evaluate, magnet, nearestValid, normRot, rotOf, type Ghost, type Hit } from './build/placement';
+import {
+  aimPoint,
+  candidateFromHit,
+  evaluate,
+  magnet,
+  nearestValid,
+  normRot,
+  rotOf,
+  snapToLock,
+  type Ghost,
+  type Hit
+} from './build/placement';
 import { DEFAULT_MODEL_ID, getModel, type Model } from './guide/models';
 import { getDef, isRoofKind } from './pieces/catalog';
 import { bonk, chime, fanfare, pop, setMuted } from './audio/sfx';
@@ -106,6 +117,8 @@ class AppState {
   celebrating = $state(false);
   helpOpen = $state(false);
   lastHit: Hit | null = null;
+  /** Shift held: no magnet toward the notches, the piece goes exactly under the cursor. */
+  freePlace = $state(false);
 
   sandbox = new BuildStore('chalet.sandbox.v3');
   guideBuild = new BuildStore('chalet.guide.build.v3');
@@ -222,9 +235,15 @@ class AppState {
       this.ghost = null;
       return;
     }
-    const g = evaluate(cand, view);
+    let g = evaluate(cand, view);
     // the spot does not work: slide the ghost to the nearest spot that fits
-    this.ghost = g.ok ? g : (nearestValid(cand, view) ?? g);
+    if (!g.ok) g = nearestValid(cand, view) ?? g;
+    // refused or merely set down: pull it into the notches nearby (Shift: no magnet)
+    if (!this.freePlace && (!g.ok || g.loose)) {
+      const held = this.ghost?.locks?.length ? this.ghost.spec : null;
+      g = snapToLock(cand, aimPoint(hit), view, held) ?? g;
+    }
+    this.ghost = g;
   }
 
   refreshGhost() {

@@ -410,7 +410,8 @@ function plankParts(W: number, side: number, width = PLANK_W - 0.012): Part[] {
   const Ww = W * G;
   const run = Ww / 2 + GABLE_C;
   const Lsl = run / CA;
-  const over = 0.04;
+  // negative: the plank stops just short of the ridge line, so the two slopes don't overlap
+  const over = -0.03;
   const Lp = Lsl + EAVE + over;
   const dist = Lp / 2 - over;
   const sx = side < 0 ? -1 : 1;

@@ -14,6 +14,8 @@
 
   export const GHOST_OK = ghostMat('#4cd964', 0.55);
   export const GHOST_BAD = ghostMat('#ff3b30', 0.45);
+  /** Allowed but not in a notch: only set down. */
+  export const GHOST_LOOSE = ghostMat('#ffb020', 0.5);
   export const BLUEPRINT = ghostMat('#3d9bff', 0.28);
 </script>
 
@@ -25,7 +27,7 @@
 
   interface Props {
     spec: PieceSpec;
-    variant: 'ok' | 'bad' | 'blueprint';
+    variant: 'ok' | 'loose' | 'bad' | 'blueprint';
     lift?: number;
   }
 
@@ -33,7 +35,9 @@
 
   const geo = $derived(getGeometry(spec));
   const t = $derived(transformOf(spec));
-  const material = $derived(variant === 'ok' ? GHOST_OK : variant === 'bad' ? GHOST_BAD : BLUEPRINT);
+  const material = $derived(
+    variant === 'ok' ? GHOST_OK : variant === 'loose' ? GHOST_LOOSE : variant === 'bad' ? GHOST_BAD : BLUEPRINT
+  );
 
   let time = 0;
   useTask((delta) => {

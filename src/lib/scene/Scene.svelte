@@ -126,7 +126,7 @@
 {/each}
 
 {#if app.ghost && app.tool === 'build' && !app.demo.active}
-  <Ghost spec={app.ghost.spec} variant={app.ghost.ok ? 'ok' : 'bad'} />
+  <Ghost spec={app.ghost.spec} variant={!app.ghost.ok ? 'bad' : app.ghost.loose ? 'loose' : 'ok'} />
   {#if app.ghost.ok && app.ghost.locks?.length}
     <LockMarkers locks={app.ghost.locks} />
   {/if}

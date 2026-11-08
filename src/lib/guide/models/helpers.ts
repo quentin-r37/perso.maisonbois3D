@@ -130,3 +130,52 @@ export function ridgePieces(gables: PieceSpec[]): PieceSpec[] {
 export function chimneyPiece(gables: PieceSpec[], half: number): PieceSpec {
   return roofSpec('chimney', roofOf(gables), 1, half);
 }
+
+export interface RoofOptions {
+  gablesHint?: string;
+  beamsHint?: string;
+  ridgeHint?: string;
+  /** Chimney position along the ridge, in half-plates. */
+  chimney?: number;
+  chimneyHint?: string;
+}
+
+/** The usual roof sequence: gables, beams, planks, ridge caps (and chimney). */
+export function roofSteps(gables: PieceSpec[], o: RoofOptions = {}): Step[] {
+  const steps: Step[] = [
+    {
+      title: 'The gables',
+      pieces: gables,
+      hint: o.gablesHint ?? 'The two yellow gables sit on top of the front and back walls.'
+    },
+    {
+      title: 'The roof beams — left',
+      pieces: battenPieces(gables, -1),
+      hint: o.beamsHint ?? 'The orange beams slide into the slanted notches of the gables.'
+    },
+    { title: 'The roof beams — right', pieces: battenPieces(gables, 1) },
+    {
+      title: 'Roof — left slope',
+      pieces: roofPieces(gables, -1),
+      hint: 'Lay the green planks on the beams, side by side.'
+    },
+    { title: 'Roof — right slope', pieces: roofPieces(gables, 1) },
+    {
+      title: 'The ridge caps',
+      pieces: ridgePieces(gables),
+      hint: o.ridgeHint ?? 'They close the top of the roof.'
+    }
+  ];
+  if (o.chimney !== undefined)
+    steps.push({
+      title: 'The chimney',
+      pieces: [chimneyPiece(gables, o.chimney)],
+      hint: o.chimneyHint ?? 'The chimney sits astride the ridge.'
+    });
+  return steps;
+}
+
+/** Prefixes the titles of a group of steps (several buildings in one model). */
+export function prefixSteps(prefix: string, steps: Step[]): Step[] {
+  return steps.map((s) => ({ ...s, title: `${prefix}: ${s.title}` }));
+}

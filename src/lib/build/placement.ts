@@ -1,6 +1,6 @@
 import { getDef, isRoofKind } from '../pieces/catalog';
 import { G, type PieceSpec, type Side } from './grid';
-import { contactsOf, dropHeight, validate, type Contact, type PointIndex, type Validation } from './snap';
+import { contactsOf, dropHeight, specKey, validate, type Contact, type PointIndex, type Validation } from './snap';
 import { PLANK_W, RIDGE_DIV, nearestBatten, roofSpec, type Roof } from './roof';
 import { boxesCenter, centerOf } from './transform';
 
@@ -25,6 +25,16 @@ export interface Ghost extends Validation {
   spec: PieceSpec;
   /** Where the notches will lock into each other (visual cue). */
   locks?: Contact[];
+  /**
+   * Allowed, but only set down: a notched piece (log, gable) above the table whose
+   * notches lock into nothing. In the real kit every one of them sits in a notch.
+   */
+  loose?: boolean;
+}
+
+/** Pieces meant to lock: the notched ones (logs, gables), once above the table. */
+export function wantsLock(spec: PieceSpec): boolean {
+  return !!getDef(spec.type).notches?.length && spec.y > 0;
 }
 
 export function normRot(type: string, rot: number) {
@@ -35,6 +45,18 @@ export function normRot(type: string, rot: number) {
 export function rotOf(type: string, rot: number): { axis: 'x' | 'z'; side: Side } {
   const r = normRot(type, rot);
   return { axis: r % 2 === 0 ? 'x' : 'z', side: r >= 2 ? -1 : 1 };
+}
+
+/** Point (x, z) the piece is centered on: the hit, pushed out when it is a side face. */
+export function aimPoint(hit: Hit): [number, number] {
+  let px = hit.point.x;
+  let pz = hit.point.z;
+  if (hit.kind === 'piece' && hit.normal && Math.abs(hit.normal.y) < 0.5) {
+    // side face: place next to it rather than on top
+    px += hit.normal.x * 0.2;
+    pz += hit.normal.z * 0.2;
+  }
+  return [px, pz];
 }
 
 /** Converts a raycast hit into a candidate piece (with its rest height). */
@@ -59,13 +81,7 @@ export function candidateFromHit(type: string, rot: number, hit: Hit, view: Buil
     return roofSpec(type, roof, side, slot);
   }
 
-  let px = hit.point.x;
-  let pz = hit.point.z;
-  if (hit.kind === 'piece' && hit.normal && Math.abs(hit.normal.y) < 0.5) {
-    // side face: place next to it rather than on top
-    px += hit.normal.x * 0.2;
-    pz += hit.normal.z * 0.2;
-  }
+  const [px, pz] = aimPoint(hit);
   const { axis, side } = rotOf(type, rot);
   // the piece itself (not its grid footprint) is centered under the cursor:
   // a half floor goes in the half of the room being pointed at
@@ -80,7 +96,43 @@ export function candidateFromHit(type: string, rot: number, hit: Hit, view: Buil
 export function evaluate(spec: PieceSpec, view: BuildView): Ghost {
   const v = validate(spec, view.pieces, view.index, view.roofs);
   const locks = v.ok && !isRoofKind(getDef(spec.type).kind) ? contactsOf(view.index, spec).supports.filter((c) => c.lock) : [];
-  return { spec, ...v, locks };
+  return { spec, ...v, locks, loose: v.ok && !locks.length && wantsLock(spec) };
+}
+
+/** How far (world units, cursor to piece center) the magnet pulls a piece into a notch. */
+export const SNAP_RADIUS = 1.3 * G;
+/** Once caught, a piece is only let go beyond this distance (no flicker between two spots). */
+export const SNAP_KEEP = 1.7 * G;
+const SNAP_REACH = 2;
+
+/**
+ * Magnet toward the notches: around the spot under the cursor, the spot where the
+ * piece locks into notches, if one is close enough. Preferred: the closest, then the
+ * one with the most locks; `held` (the spot already caught) is sticky.
+ */
+export function snapToLock(
+  spec: PieceSpec,
+  aim: readonly [number, number],
+  view: BuildView,
+  held: PieceSpec | null = null
+): Ghost | null {
+  if (!getDef(spec.type).notches?.length) return null;
+  const heldKey = held && held.type === spec.type ? specKey(held) : null;
+  let best: { g: Ghost; score: number } | null = null;
+  for (let dx = -SNAP_REACH; dx <= SNAP_REACH; dx++)
+    for (let dz = -SNAP_REACH; dz <= SNAP_REACH; dz++) {
+      const s: PieceSpec = { ...spec, ix: spec.ix + dx, iz: spec.iz + dz };
+      s.y = dropHeight(view.index, s);
+      const sticky = heldKey === specKey(s);
+      const [cx, cz] = boxesCenter(s);
+      const d = Math.hypot(cx - aim[0], cz - aim[1]);
+      if (d > (sticky ? SNAP_KEEP : SNAP_RADIUS)) continue;
+      const g = evaluate(s, view);
+      if (!g.ok || !g.locks?.length) continue;
+      const score = d - (sticky ? 0.4 * G : 0) - 0.15 * G * g.locks.length;
+      if (!best || score < best.score) best = { g, score };
+    }
+  return best?.g ?? null;
 }
 
 /**
