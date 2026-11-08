@@ -1,5 +1,5 @@
 import { getDef, isRoofKind } from '../pieces/catalog';
-import { G, type PieceSpec, type Side } from './grid';
+import { G, Q, type PieceSpec, type Side } from './grid';
 import { contactsOf, dropHeight, specKey, validate, type Contact, type PointIndex, type Validation } from './snap';
 import { PLANK_W, RIDGE_DIV, nearestBatten, roofSpec, type Roof } from './roof';
 import { boxesCenter, centerOf } from './transform';
@@ -13,6 +13,8 @@ export interface Hit {
   uid?: number;
   roofKey?: string;
   side?: Side;
+  /** The pointer ray (world space), to find where it crosses the plane the piece rests on. */
+  ray?: { origin: { x: number; y: number; z: number }; dir: { x: number; y: number; z: number } };
 }
 
 export interface BuildView {
@@ -81,7 +83,11 @@ export function candidateFromHit(type: string, rot: number, hit: Hit, view: Buil
     return roofSpec(type, roof, side, slot);
   }
 
-  const [px, pz] = aimPoint(hit);
+  return specAt(type, rot, resolveAim(type, rot, hit, view), view);
+}
+
+/** The piece centered on (px, pz), at its rest height. */
+function specAt(type: string, rot: number, [px, pz]: readonly [number, number], view: BuildView): PieceSpec {
   const { axis, side } = rotOf(type, rot);
   // the piece itself (not its grid footprint) is centered under the cursor:
   // a half floor goes in the half of the room being pointed at
@@ -91,6 +97,32 @@ export function candidateFromHit(type: string, rot: number, hit: Hit, view: Buil
   const spec: PieceSpec = { type, ix, iz, y: 0, axis, side };
   spec.y = dropHeight(view.index, spec);
   return spec;
+}
+
+/**
+ * Point (x, z) the piece is centered on, corrected for parallax: when the piece rests
+ * well above the point hit (a floor laid on top of walls while the pointer ray hits the
+ * table between them, or the inside face of a wall), it goes where the ray crosses the
+ * plane it rests on, i.e. where it is seen under the cursor, not where the ray ends.
+ */
+export function resolveAim(type: string, rot: number, hit: Hit, view: BuildView): [number, number] {
+  const aim = aimPoint(hit);
+  const ray = hit.ray;
+  if (!ray || ray.dir.y > -1e-3 || isRoofKind(getDef(type).kind)) return aim;
+  let cur = aim;
+  let y = specAt(type, rot, cur, view).y;
+  for (let k = 0; k < 4; k++) {
+    const plane = y * Q;
+    if (plane - hit.point.y < Q * 1.5) return aim; // rests (about) where the ray hits
+    const t = (plane - ray.origin.y) / ray.dir.y;
+    if (t <= 0) return aim;
+    const next: [number, number] = [ray.origin.x + ray.dir.x * t, ray.origin.z + ray.dir.z * t];
+    const ny = specAt(type, rot, next, view).y;
+    if (ny === y) return next; // the piece rests on the plane the ray was cut with
+    cur = next;
+    y = ny;
+  }
+  return aim;
 }
 
 export function evaluate(spec: PieceSpec, view: BuildView): Ghost {

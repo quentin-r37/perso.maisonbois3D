@@ -54,7 +54,11 @@
         normal,
         uid: i.object.userData.uid,
         roofKey: i.object.userData.roofKey,
-        side: i.object.userData.side
+        side: i.object.userData.side,
+        ray: {
+          origin: { x: raycaster.ray.origin.x, y: raycaster.ray.origin.y, z: raycaster.ray.origin.z },
+          dir: { x: raycaster.ray.direction.x, y: raycaster.ray.direction.y, z: raycaster.ray.direction.z }
+        }
       };
     }
     return null;

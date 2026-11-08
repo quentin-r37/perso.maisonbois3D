@@ -2,7 +2,7 @@ import { BuildStore, sanitizeSpecs, writeStorage } from './build/store.svelte';
 import type { PieceSpec, PlacedPiece } from './build/grid';
 import { canRemove, dropHeight, specKey } from './build/snap';
 import {
-  aimPoint,
+  resolveAim,
   candidateFromHit,
   evaluate,
   magnet,
@@ -241,7 +241,7 @@ class AppState {
     // refused or merely set down: pull it into the notches nearby (Shift: no magnet)
     if (!this.freePlace && (!g.ok || g.loose)) {
       const held = this.ghost?.locks?.length ? this.ghost.spec : null;
-      g = snapToLock(cand, aimPoint(hit), view, held) ?? g;
+      g = snapToLock(cand, resolveAim(this.selected, this.rot, hit, view), view, held) ?? g;
     }
     this.ghost = g;
   }
