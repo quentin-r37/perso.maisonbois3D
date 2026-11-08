@@ -195,8 +195,11 @@ export class DemoWorld {
     this.#opts = opts;
     this.world = new R.World({ x: 0, y: -GRAVITY, z: 0 });
     this.world.timestep = STEP;
-    // 2 iterations instead of 4: ~30% faster, the stacks stay stable (see the tests)
-    this.world.numSolverIterations = 2;
+    // 4 iterations (Rapier's default): with only 2, the piles of interlocked logs left after
+    // a collapse never settle — they jitter, hop and "dance" instead of falling asleep
+    // (measured: ~10x fewer restless pieces a few seconds after a bomb or a quake, for a
+    // step cost that barely changes)
+    this.world.numSolverIterations = 4;
     this.#events = new R.EventQueue(true);
 
     // floor: kinematic so the quake can shake it
