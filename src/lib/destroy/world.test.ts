@@ -3,7 +3,7 @@ import { Quaternion, Vector3 } from 'three';
 import type { PlacedPiece } from '../build/grid';
 import { MODELS } from '../guide/models';
 import { loadRapier } from './rapier';
-import { explode, quake, tornado } from './effects';
+import { explode, quake, runningQuake, tornado } from './effects';
 import { resetFx } from './fx';
 import { DemoWorld, type Impact, type Rapier } from './world';
 
@@ -95,6 +95,24 @@ describe('demolition world', () => {
     });
     expect(fallen.length).toBeGreaterThan(b.debris.length * 0.5);
     b.dispose();
+  });
+
+  it('clicking "earthquake" twice renews the quake, nothing gets launched into the sky', () => {
+    resetFx();
+    const w = new DemoWorld(R, chalet());
+    w.addField(quake(w));
+    run(w, 0.5);
+    // what Demolition.svelte does on the second click
+    runningQuake(w)!.renew(4);
+    expect(w.fields).toHaveLength(1);
+    let maxY = 0;
+    for (let t = 0; t < 5; t += 1 / 60) {
+      w.step(1 / 60);
+      for (const d of w.debris) if (!d.lost) maxY = Math.max(maxY, d.body.worldCom().y);
+    }
+    // (two stacked quakes used to throw pieces hundreds of metres up)
+    expect(maxY).toBeLessThan(w.top + 4);
+    w.dispose();
   });
 });
 

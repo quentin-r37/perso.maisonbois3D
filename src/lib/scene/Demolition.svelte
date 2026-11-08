@@ -9,7 +9,7 @@
   import { app, type DemoShot } from '../app.svelte';
   import { loadRapier } from '../destroy/rapier';
   import { DemoWorld, type Impact, type Quat, type Vec3 } from '../destroy/world';
-  import { explode, quake, tornado } from '../destroy/effects';
+  import { explode, quake, runningQuake, tornado } from '../destroy/effects';
   import { emit, kick, resetFx, slowmo, timeScale } from '../destroy/fx';
   import { chime } from '../audio/sfx';
   import * as sfx from '../audio/demolition';
@@ -62,6 +62,8 @@
   const { camera } = useThrelte();
   const tmp = new Vector3();
   let stops: sfx.Stop[] = [];
+  /** Rumble of the running earthquake (replaced when it's renewed). */
+  let stopQuakeSound: sfx.Stop | null = null;
 
   /** Friction: pieces rubbing on each other, and on the table. */
   const rubs = { wood: new sfx.Rub('wood'), table: new sfx.Rub('table') };
@@ -152,11 +154,16 @@
         stops.push(sfx.wind(5.3));
         kick(0.15);
         break;
-      case 'quake':
-        world.addField(quake(world, 4));
-        stops.push(sfx.quake(4.2));
+      case 'quake': {
+        // clicked again while it shakes: the same quake goes on longer (two would add up)
+        const running = runningQuake(world);
+        if (running) running.renew(4);
+        else world.addField(quake(world, 4));
+        stopQuakeSound?.();
+        stops.push((stopQuakeSound = sfx.quake(4.2)));
         kick(0.4);
         break;
+      }
     }
   }
 

@@ -139,30 +139,60 @@ export function tornado(w: DemoWorld, duration = 5): Field {
   };
 }
 
+/** A running earthquake: clicking "earthquake" again renews it instead of adding a second one. */
+export interface Quake extends Field {
+  readonly kind: 'quake';
+  /** Starts over for `duration` seconds from now, at full strength (reached smoothly). */
+  renew(duration?: number): void;
+}
+
+/** The earthquake currently shaking the table, if any. */
+export const runningQuake = (w: DemoWorld): Quake | undefined =>
+  w.fields.find((f): f is Quake => (f as Quake).kind === 'quake');
+
 /**
  * Earthquake: the table shakes and the chalet collapses under its own weight.
+ * Only one at a time: two quakes would add up their jolts (everything flies off) and the
+ * second one would take the shaken table's position as its rest position.
  */
-export function quake(w: DemoWorld, duration = 4): Field {
+export function quake(w: DemoWorld, duration = 4): Quake {
   const rest = w.floor.translation();
   const base = { x: rest.x, y: rest.y, z: rest.z };
   let t0: number | null = null;
+  /** End of the quake, in seconds since its start. */
+  let end = duration;
+  let span = duration;
+  /** Current strength (0..1): follows the envelope at a limited rate, so a renewal
+   * doesn't make the table jump (a kinematic floor jumping = everything on it is launched). */
+  let amp = 0;
   let nextJolt = 0;
   const [cx, , cz] = w.center;
 
   return {
-    update(w, _h, time) {
+    kind: 'quake',
+    renew(d = duration) {
+      if (t0 === null) return;
+      const t = w.time - t0;
+      end = t + d;
+      span = d;
+    },
+    update(w, h, time) {
       if (t0 === null) {
         t0 = time;
         for (const d of w.debris) w.activate(d);
       }
       const t = time - t0;
-      if (t > duration) {
+      if (t > end) {
         w.floor.setNextKinematicTranslation(base);
         return false;
       }
-      const env = Math.min(1, t / 0.35) * (1 - t / duration) ** 1.2;
+      const target = Math.max(0, (end - t) / span) ** 1.2;
+      // attack in ~0.35 s, like the original ramp
+      amp += Math.max(-h / 0.35, Math.min(h / 0.35, target - amp));
+      const env = amp;
       const A = 0.14 * env;
       const tau = Math.PI * 2;
+      // (the phase runs on from the start: a renewal doesn't jerk the table)
       w.floor.setNextKinematicTranslation({
         x: base.x + A * Math.sin(tau * 4.3 * t),
         y: base.y + A * 0.3 * Math.max(0, Math.sin(tau * 6.7 * t)),
@@ -176,6 +206,9 @@ export function quake(w: DemoWorld, duration = 4): Field {
         for (const d of w.debris) {
           if (d.lost) continue;
           const b = d.body;
+          // the jolts come through the ground: a piece already in the air (thrown by
+          // an earlier jolt) isn't shaken again, or it would keep climbing
+          if (Math.abs(b.linvel().y) > 0.8) continue;
           const c = b.worldCom();
           // jolts: the higher the piece, the more it sways
           let sway = (0.7 + c.y * 0.55) * env;
