@@ -1,7 +1,7 @@
 import { G } from '../build/grid';
 
 export type Kind = 'log' | 'insert' | 'gable' | 'floor' | 'decor' | 'batten' | 'roof' | 'ridge' | 'chimney';
-export type Paint = 'wood' | 'black' | 'light' | 'orange' | 'white' | 'green' | 'red' | 'yellow' | 'dark' | 'blue' | 'skin' | 'hair';
+export type Paint = 'wood' | 'black' | 'light' | 'orange' | 'white' | 'green' | 'red' | 'yellow' | 'dark' | 'blue' | 'skin' | 'hair' | 'grey' | 'purple' | 'slate' | 'auburn';
 export type Category = 'rondins' | 'ouvertures' | 'toit' | 'deco';
 
 export interface PieceDef {
@@ -206,7 +206,12 @@ export const CATALOG: PieceDef[] = [
     rotations: 4
   },
   { ...base, id: 'tree', name: 'Fir tree', kind: 'decor', category: 'deco', h: 16, paint: 'green', rotations: 4 },
-  { ...base, id: 'figurine', name: 'Little character', kind: 'decor', category: 'deco', h: 10, paint: 'red', rotations: 4 }
+  { ...base, id: 'figurine', name: 'Little character', kind: 'decor', category: 'deco', h: 10, paint: 'red', rotations: 4 },
+  // castle decor: a pennant on a pole planted in a round yellow foot, and a knight with his wooden sword
+  { ...base, id: 'flag', name: 'Flag', kind: 'decor', category: 'deco', h: 29, paint: 'purple', rotations: 4 },
+  { ...base, id: 'knight', name: 'Knight', kind: 'decor', category: 'deco', h: 11, paint: 'grey', rotations: 4 },
+  // second knight: crown, auburn hair, red collar, a battle axe
+  { ...base, id: 'knight-crown', name: 'Crowned knight', kind: 'decor', category: 'deco', h: 12, paint: 'grey', rotations: 4 }
 ];
 
 const BY_ID = new Map(CATALOG.map((d) => [d.id, d]));

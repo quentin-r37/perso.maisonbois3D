@@ -1,6 +1,7 @@
 import {
   BoxGeometry,
   BufferGeometry,
+  ConeGeometry,
   CylinderGeometry,
   ExtrudeGeometry,
   Float32BufferAttribute,
@@ -616,6 +617,163 @@ function figurineParts(): Part[] {
   return parts;
 }
 
+/** Small shield outline (crest), centered on (0, 0); `half` keeps one side of it. */
+function shieldShape(w: number, h: number, half: -1 | 0 | 1): Shape {
+  const s = new Shape();
+  const x0 = half === 1 ? 0 : -w / 2;
+  const x1 = half === -1 ? 0 : w / 2;
+  s.moveTo(x0, h / 2);
+  s.lineTo(x1, h / 2);
+  if (half !== -1) s.quadraticCurveTo(w / 2, -h * 0.15, 0, -h / 2);
+  else s.lineTo(0, -h / 2);
+  if (half !== 1) s.quadraticCurveTo(-w / 2, -h * 0.15, -w / 2, h / 2);
+  else s.lineTo(0, h / 2);
+  s.closePath();
+  return s;
+}
+
+/** Red and yellow crest (the knight's chest, the flag), facing +z. */
+function crestParts(w: number, h: number, depth: number, m: Matrix4): Part[] {
+  return [extrude(shieldShape(w, h, -1), depth, 'yellow', m, 0.004), extrude(shieldShape(w, h, 1), depth, 'red', m, 0.004)];
+}
+
+/** Flag cloth: height, length, top, and the zigzag that splits the colors. */
+const FLAG = { H: 0.5, L: 1.3, top: 2.7, zig: 0.74, step: 0.09, stripe: 0.07, tail: 0.26 };
+
+function flagParts(): Part[] {
+  const { H, L, top, zig, step, stripe, tail } = FLAG;
+  const parts: Part[] = [
+    // round yellow foot, wooden pole with a rounded top
+    { geo: finalize(new CylinderGeometry(0.26, 0.27, 0.2, 28), mat([0, 0.1, 0])), paint: 'yellow' },
+    { geo: finalize(new CylinderGeometry(0.045, 0.045, 2.62, 14), mat([0, 0.2 + 1.31, 0])), paint: 'wood' },
+    { geo: finalize(new SphereGeometry(0.047, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), mat([0, 2.82, 0])), paint: 'wood' }
+  ];
+  // zigzag line between the colors, from top to bottom, pushed by `d` toward the tail
+  const ys = [H, H * 0.75, H / 2, H * 0.25, 0];
+  type P = readonly [number, number];
+  const zz = (d: number): P[] => ys.map((y, i) => [zig + d - (i % 2) * step, y]);
+  const poly = (pts: P[]) => {
+    const sh = new Shape();
+    sh.moveTo(...pts[0]);
+    for (const p of pts.slice(1)) sh.lineTo(...p);
+    sh.closePath();
+    return sh;
+  };
+  const m = mat([0, top - H, 0]);
+  const T = 0.02;
+  // purple near the pole (wrapped around it), a red zigzag stripe, a yellow swallowtail
+  parts.push(extrude(poly([[-0.07, 0], [-0.07, H], ...zz(0)]), T, 'purple', m, 0.004));
+  parts.push(extrude(poly([...zz(0), ...zz(stripe).reverse()]), T, 'red', m, 0.004));
+  parts.push(
+    extrude(poly([...zz(stripe).reverse(), [L, H], [L - tail, H / 2], [L, 0]]), T, 'yellow', m, 0.004)
+  );
+  // crest on the purple field, showing on both sides
+  parts.push(...crestParts(0.17, 0.22, T + 0.012, mat([0.38, top - H / 2, 0])));
+  return parts;
+}
+
+type Sph = (r: number, c: [number, number, number], paint: Paint, phi0?: number, phiLen?: number, th0?: number, thLen?: number) => void;
+
+/**
+ * Body shared by the knights (facing +z): legs (thighs, shins, feet sticking out in front),
+ * body with the red and yellow crest, arms, hands, bare head with its eyes.
+ */
+function knightBody(c: { body: Paint; arms: Paint; thighs: Paint; shins: Paint; feet: Paint; eyes: Paint }) {
+  const parts: Part[] = [];
+  const sph: Sph = (r, at, paint, phi0 = 0, phiLen = Math.PI * 2, th0 = 0, thLen = Math.PI) =>
+    parts.push({ geo: finalize(new SphereGeometry(r, 22, 14, phi0, phiLen, th0, thLen), mat(at)), paint });
+  for (const sx of [-1, 1]) {
+    const [x0, x1] = sx > 0 ? [0.012, 0.17] : [-0.17, -0.012];
+    if (c.thighs === c.shins) parts.push(rbox(x0, x1, 0.07, 0.42, -0.085, 0.085, c.thighs, 0.03));
+    else {
+      parts.push(rbox(x0, x1, 0.07, 0.25, -0.085, 0.085, c.shins, 0.03));
+      parts.push(rbox(x0, x1, 0.25, 0.42, -0.085, 0.085, c.thighs, 0.03));
+    }
+    parts.push(rbox(x0 + 0.003 * sx, x1 - 0.002 * sx, 0, 0.09, -0.09, 0.14, c.feet, 0.03));
+  }
+  parts.push(rbox(-0.2, 0.2, 0.4, 0.76, -0.125, 0.125, c.body, 0.06));
+  for (const sx of [-1, 1]) {
+    parts.push({
+      geo: finalize(new CylinderGeometry(0.058, 0.058, 0.32, 16), mat([sx * 0.245, 0.575, 0], [0, 0, -sx * 0.12])),
+      paint: c.arms
+    });
+    sph(0.055, [sx * 0.27, 0.405, 0], 'skin');
+  }
+  parts.push(...crestParts(0.17, 0.22, 0.02, mat([0, 0.585, 0.128])));
+  sph(0.16, [0, 0.92, 0], 'skin');
+  sph(0.022, [-0.065, 0.93, 0.148], c.eyes);
+  sph(0.022, [0.065, 0.93, 0.148], c.eyes);
+  return { parts, sph };
+}
+
+/** Rounded top and back of the head, the face left open (helmet, hair). */
+function headCap(sph: Sph, paint: Paint, low: number) {
+  sph(0.172, [0, 0.93, 0], paint, 0, Math.PI * 2, 0, Math.PI * 0.4);
+  sph(0.172, [0, 0.93, 0], paint, Math.PI / 2 + 0.62, Math.PI * 2 - 1.24, Math.PI * 0.4, Math.PI * low);
+}
+
+function knightParts(): Part[] {
+  const { parts, sph } = knightBody({ body: 'grey', arms: 'grey', thighs: 'grey', shins: 'grey', feet: 'black', eyes: 'dark' });
+  // helmet with a nose guard
+  headCap(sph, 'grey', 0.32);
+  parts.push(rbox(-0.02, 0.02, 0.86, 0.99, 0.136, 0.17, 'grey', 0.01));
+  // wooden sword, point down, standing at his right hand
+  const sx = 0.36;
+  const blade = new Shape();
+  blade.moveTo(0, 0.02);
+  blade.lineTo(0.045, 0.1);
+  blade.lineTo(0.04, 0.6);
+  blade.lineTo(-0.04, 0.6);
+  blade.lineTo(-0.045, 0.1);
+  blade.closePath();
+  parts.push(extrude(blade, 0.04, 'wood', mat([sx, 0, 0]), 0.008));
+  parts.push(rbox(sx - 0.13, sx + 0.13, 0.6, 0.65, -0.024, 0.024, 'wood', 0.015));
+  parts.push(rbox(sx - 0.026, sx + 0.026, 0.65, 0.8, -0.022, 0.022, 'wood', 0.012));
+  parts.push({ geo: finalize(new CylinderGeometry(0.045, 0.045, 0.04, 16), mat([sx, 0.83, 0], [Math.PI / 2, 0, 0])), paint: 'wood' });
+  return parts;
+}
+
+function crownedKnightParts(): Part[] {
+  const { parts, sph } = knightBody({ body: 'grey', arms: 'slate', thighs: 'slate', shins: 'grey', feet: 'slate', eyes: 'blue' });
+  // auburn hair, a red collar over the shoulders
+  headCap(sph, 'auburn', 0.22);
+  parts.push(rbox(-0.21, 0.21, 0.7, 0.785, -0.135, 0.135, 'red', 0.04));
+  const v = new Shape();
+  v.moveTo(-0.13, 0.72);
+  v.lineTo(0.13, 0.72);
+  v.lineTo(0, 0.675);
+  v.closePath();
+  parts.push(extrude(v, 0.03, 'red', mat([0, 0, 0.125]), 0.006));
+  // yellow crown with points all around
+  parts.push({ geo: finalize(new CylinderGeometry(0.128, 0.12, 0.07, 24), mat([0, 1.065, 0])), paint: 'yellow' });
+  for (let k = 0; k < 7; k++) {
+    const a = (k / 7) * Math.PI * 2;
+    parts.push({
+      geo: finalize(new ConeGeometry(0.036, 0.075, 8), mat([Math.sin(a) * 0.105, 1.135, Math.cos(a) * 0.105])),
+      paint: 'yellow'
+    });
+  }
+  // wooden battle axe standing at his right hand: long haft, double blade, a spike on top
+  const ax = -0.36;
+  parts.push({ geo: finalize(new CylinderGeometry(0.024, 0.024, 0.9, 12), mat([ax, 0.45, 0])), paint: 'wood' });
+  parts.push(rbox(ax - 0.045, ax + 0.045, 0.4, 0.44, -0.03, 0.03, 'wood', 0.012));
+  const head = new Shape();
+  head.moveTo(0.03, 0.67);
+  head.quadraticCurveTo(0.12, 0.68, 0.15, 0.6);
+  head.quadraticCurveTo(0.11, 0.76, 0.15, 0.92);
+  head.quadraticCurveTo(0.12, 0.84, 0.03, 0.85);
+  head.lineTo(0.03, 0.9);
+  head.lineTo(0, 0.98);
+  head.lineTo(-0.03, 0.9);
+  head.lineTo(-0.03, 0.85);
+  head.quadraticCurveTo(-0.12, 0.84, -0.15, 0.92);
+  head.quadraticCurveTo(-0.11, 0.76, -0.15, 0.6);
+  head.quadraticCurveTo(-0.12, 0.68, -0.03, 0.67);
+  head.closePath();
+  parts.push(extrude(head, 0.035, 'wood', mat([ax, 0, 0]), 0.008));
+  return parts;
+}
+
 // ---------------------------------------------------------------------------
 
 const cache = new Map<string, PieceGeometry>();
@@ -672,7 +830,16 @@ export function getGeometry(spec: GeoSpec): PieceGeometry {
       parts = spec.type === 'floor-half' ? halfFloorParts(def.length, def.depth) : floorParts(def.length, def.depth);
       break;
     case 'decor':
-      parts = spec.type === 'tree' ? treeParts() : figurineParts();
+      parts =
+        spec.type === 'tree'
+          ? treeParts()
+          : spec.type === 'flag'
+            ? flagParts()
+            : spec.type === 'knight'
+              ? knightParts()
+              : spec.type === 'knight-crown'
+                ? crownedKnightParts()
+                : figurineParts();
       break;
   }
   g = mergeParts(parts);

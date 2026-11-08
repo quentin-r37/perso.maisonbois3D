@@ -78,7 +78,13 @@ const PAINT_COLORS: Record<Paint, string> = {
   dark: '#5a3a22',
   blue: '#3f8fd8',
   skin: '#f1c7a1',
-  hair: '#c77b2c'
+  hair: '#c77b2c',
+  // the knight's armour (painted wood) and the flag's cloth
+  grey: '#80838a',
+  purple: '#5b4fa0',
+  // the crowned knight's arms and legs, his hair
+  slate: '#4a5568',
+  auburn: '#8e3b22'
 };
 
 const WOOD_TINTS = ['#dca46a', '#d29a5f', '#e1ad76'];
@@ -92,7 +98,7 @@ function make(paint: Paint, variant = 0): Material {
   const painted = paint !== 'wood' && paint !== 'dark' && paint !== 'light';
   const plastic = paint === 'white';
   const color = paint === 'wood' ? WOOD_TINTS[variant % WOOD_TINTS.length] : PAINT_COLORS[paint];
-  const useGrain = paint !== 'skin' && paint !== 'blue' && paint !== 'hair' && !plastic;
+  const useGrain = paint !== 'skin' && paint !== 'blue' && paint !== 'hair' && paint !== 'purple' && !plastic;
   m = new MeshStandardMaterial({
     color: new Color(color),
     map: isBrowser && useGrain ? grainTexture() : null,

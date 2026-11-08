@@ -147,3 +147,40 @@ describe('crenels', () => {
     expect(snapped?.spec).toMatchObject({ ix: 2.5, iz: 0, y: 2 });
   });
 });
+
+describe('castle decor', () => {
+  const at = (x: number, z: number): Hit => ({ kind: 'ground', point: { x, y: 0, z } });
+
+  it('the flag stands with its foot under the cursor, on the table', () => {
+    for (const rot of [0, 1, 2, 3]) {
+      const s = candidateFromHit('flag', rot, at(2 * G, 3 * G), viewOf([]))!;
+      expect([s.ix, s.iz, s.y]).toEqual([2, 3, 0]);
+      expect(evaluate(s, viewOf([])).ok).toBe(true);
+    }
+  });
+
+  it('the flag stands inside a tower, its cloth flying over the walls around it', () => {
+    // a 5 × 5 tower, 6 courses high
+    const pieces: PieceSpec[] = [];
+    for (let c = 0; c < 6; c++) {
+      const y = c * 2 * 2;
+      if (c % 2 === 0) pieces.push({ type: 'medium', ix: 0, iz: 0, y, axis: 'x' }, { type: 'medium', ix: 0, iz: 5, y, axis: 'x' });
+      else pieces.push({ type: 'medium', ix: 0, iz: 0, y, axis: 'z' }, { type: 'medium', ix: 5, iz: 0, y, axis: 'z' });
+    }
+    const v = viewOf(pieces);
+    for (const rot of [0, 1, 2, 3]) {
+      const s = candidateFromHit('flag', rot, at(4 * G, 2 * G), v)!;
+      expect([s.ix, s.iz, s.y]).toEqual([4, 2, 0]);
+      expect(evaluate(s, v).ok).toBe(true);
+    }
+  });
+
+  it('the knights stand on the table, sword or axe at their side', () => {
+    for (const type of ['knight', 'knight-crown'])
+      for (const rot of [0, 1, 2, 3]) {
+        const s = candidateFromHit(type, rot, at(0, 0), viewOf([]))!;
+        expect([s.ix, s.iz, s.y].map((v) => v + 0)).toEqual([0, 0, 0]);
+        expect(evaluate(s, viewOf([])).ok).toBe(true);
+      }
+  });
+});

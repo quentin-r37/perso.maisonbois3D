@@ -158,7 +158,21 @@ export function localBoxes(type: string, upside = false): LocalBox[] {
       b =
         type === 'tree'
           ? [{ x0: -0.5, x1: 0.5, z0: -0.08, z1: 0.08, y0: 0, y1: def.h }]
-          : [{ x0: -0.2, x1: 0.2, z0: -0.13, z1: 0.13, y0: 0, y1: def.h }];
+          : type === 'flag'
+            ? [
+                // round foot and pole only: the cloth flies over the walls and has no volume,
+                // so the foot (not the middle of the cloth) is centered under the cursor,
+                // holds it up, and the cloth never lifts it onto a wall
+                { x0: -0.27, x1: 0.27, z0: -0.27, z1: 0.27, y0: 0, y1: 2 },
+                { x0: -0.05, x1: 0.05, z0: -0.05, z1: 0.05, y0: 2, y1: def.h }
+              ]
+            : type === 'knight'
+              ? // the sword stands at his right hand
+                [{ x0: -0.25, x1: 0.46, z0: -0.13, z1: 0.14, y0: 0, y1: def.h }]
+              : type === 'knight-crown'
+                ? // the axe stands at his right hand
+                  [{ x0: -0.52, x1: 0.25, z0: -0.13, z1: 0.14, y0: 0, y1: def.h }]
+                : [{ x0: -0.2, x1: 0.2, z0: -0.13, z1: 0.13, y0: 0, y1: def.h }];
       break;
     default:
       b = [];
