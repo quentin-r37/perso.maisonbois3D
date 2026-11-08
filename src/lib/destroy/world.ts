@@ -131,7 +131,18 @@ function scaled(points: Float32Array, s: number): Float32Array {
 const qa = new Quaternion();
 const qb = new Quaternion();
 
-const pairKey = (a: number, b: number) => (a < b ? `${a}:${b}` : `${b}:${a}`);
+/** Index standing for the table in pair keys. */
+const FLOOR = 0xffff;
+/**
+ * Key of a pair of pieces (by index; `undefined` = the table). Numbers, not strings: the
+ * contact filter computes one for every contact of every step, and Rapier's body handles
+ * are denormal floats (5e-324…) that are slow to turn into text.
+ */
+const pairKey = (a: Debris | undefined, b: Debris | undefined) => {
+  const i = a ? a.index : FLOOR;
+  const j = b ? b.index : FLOOR;
+  return i < j ? i * 0x10000 + j : j * 0x10000 + i;
+};
 
 interface Probe {
   collider: Collider;
@@ -166,9 +177,13 @@ export class DemoWorld {
   #floorCollider: number;
   /** Pieces whose colliders go through the contact filter (calling it costs: only those that need it). */
   #hooked = new Set<Debris>();
-  #excluded = new Set<string>();
+  #excluded = new Set<number>();
+  /** Pieces with an excluded pair: they stay in the filter for the whole demolition. */
+  #overlapping = new Set<Debris>();
   /** Pairs that ignore each other until a given time (`unlock`). */
-  #unlocked = new Map<string, number>();
+  #unlocked = new Map<number, number>();
+  /** Unlocked pieces and when their unlock ends (then they leave the filter). */
+  #unlockEnd = new Map<Debris, number>();
   #pairs: [Debris, Debris][] = [];
   #joints = new Map<Debris, Set<ImpulseJoint>>();
   /** Speed of the glued pieces before the current step. */
@@ -183,7 +198,7 @@ export class DemoWorld {
   #prev: Float32Array = new Float32Array(0);
   #cur: Float32Array = new Float32Array(0);
   /** Pairs in contact at the previous step (a pair that wasn't is a new impact). */
-  #touching = new Set<string>();
+  #touching = new Set<number>();
   /** Sliding contacts of the last step, between pieces and on the table. */
   readonly slide: Record<Surface, Slide> = { wood: emptySlide(), table: emptySlide() };
   #events: RAPIER.EventQueue;
@@ -315,9 +330,14 @@ export class DemoWorld {
     const SOLVE = R.SolverFlags.COMPUTE_IMPULSE;
     const excluded = this.#excluded;
     const unlocked = this.#unlocked;
+    const byBody = this.#byBody;
     this.#hooks = {
       filterContactPair: (_c1, _c2, b1, b2) => {
-        const key = pairKey(b1, b2);
+        const d1 = byBody.get(b1);
+        const d2 = byBody.get(b2);
+        // (the table is never excluded nor unlocked)
+        if (!d1 || !d2) return SOLVE;
+        const key = pairKey(d1, d2);
         if (excluded.has(key)) return null;
         const until = unlocked.get(key);
         if (until === undefined) return SOLVE;
@@ -337,7 +357,7 @@ export class DemoWorld {
   #probe(probes: Probe[]) {
     // one step to build the query structures (every piece is fixed: nothing moves)
     this.world.step();
-    const touching = new Set<string>();
+    const touching = new Set<number>();
     const toHook = new Set<Debris>();
     for (const { collider, d, overlap, touch } of probes) {
       const query = (shape: Shape, f: (od: Debris) => void) =>
@@ -357,14 +377,14 @@ export class DemoWorld {
           d.body
         );
       query(touch, (od) => {
-        const key = pairKey(d.body.handle, od.body.handle);
+        const key = pairKey(d, od);
         if (touching.has(key)) return;
         touching.add(key);
         d.neighbors.push(od);
         od.neighbors.push(d);
       });
       query(overlap, (od) => {
-        const key = pairKey(d.body.handle, od.body.handle);
+        const key = pairKey(d, od);
         if (!this.#excluded.has(key)) this.#pairs.push([d, od]);
         this.#excluded.add(key);
         toHook.add(d);
@@ -372,7 +392,10 @@ export class DemoWorld {
       });
     }
     // (not inside the queries: the engine is borrowed while they run)
-    for (const d of toHook) this.#hook(d);
+    for (const d of toHook) {
+      this.#overlapping.add(d);
+      this.#hook(d);
+    }
   }
 
   /** Makes the contacts of a piece go through the filter (overlapping or unlocked pairs). */
@@ -380,6 +403,12 @@ export class DemoWorld {
     if (this.#hooked.has(d)) return;
     this.#hooked.add(d);
     for (const c of d.colliders) c.setActiveHooks(this.R.ActiveHooks.FILTER_CONTACT_PAIRS);
+  }
+
+  /** Takes a piece out of the filter (its unlock is over and it overlaps nothing). */
+  #unhook(d: Debris) {
+    if (!this.#hooked.delete(d)) return;
+    for (const c of d.colliders) c.setActiveHooks(this.R.ActiveHooks.NONE);
   }
 
   /**
@@ -459,7 +488,11 @@ export class DemoWorld {
   unlock(d: Debris, seconds: number) {
     const until = this.time + seconds;
     this.#hook(d);
-    for (const n of d.neighbors) this.#unlocked.set(pairKey(d.body.handle, n.body.handle), until);
+    this.#unlockEnd.set(d, Math.max(until, this.#unlockEnd.get(d) ?? 0));
+    for (const n of d.neighbors) {
+      const key = pairKey(d, n);
+      this.#unlocked.set(key, Math.max(until, this.#unlocked.get(key) ?? 0));
+    }
   }
 
   /** Tears a piece away from the pieces it's glued to. */
@@ -530,6 +563,14 @@ export class DemoWorld {
       this.#acc -= STEP;
       n++;
       this.time += STEP;
+      // unlocks that are over: those pieces leave the contact filter (it runs for every
+      // contact of a filtered piece, and most pieces get unlocked by an explosion)
+      if (this.#unlockEnd.size)
+        for (const [d, end] of this.#unlockEnd)
+          if (end <= this.time) {
+            this.#unlockEnd.delete(d);
+            if (!this.#overlapping.has(d)) this.#unhook(d);
+          }
       this.fields = this.fields.filter((f) => f.update(this, STEP, this.time));
       for (const d of this.#joints.keys()) {
         const v = d.body.linvel();
@@ -568,10 +609,9 @@ export class DemoWorld {
     const impacts: Impact[] = [];
     const torn: Debris[] = [];
     const woken: Debris[] = [];
-    const touching = new Set<string>();
+    const touching = new Set<number>();
     const slide = { wood: emptySlide(), table: emptySlide() };
     const floorC = this.#floorCollider;
-    const floorB = this.floor.handle;
 
     this.#events.drainContactForceEvents((e) => {
       const c1 = e.collider1();
@@ -606,7 +646,7 @@ export class DemoWorld {
       const v1 = this.#before(d1);
       const v2 = this.#before(d2);
       const approach = Math.abs((v1[0] - v2[0]) * nx + (v1[1] - v2[1]) * ny + (v1[2] - v2[2]) * nz);
-      const key = pairKey(d1 ? d1.body.handle : floorB, d2 ? d2.body.handle : floorB);
+      const key = pairKey(d1, d2);
       touching.add(key);
       const isNew = !this.#touching.has(key);
       // a new contact, or a contact that already existed but takes a real blow

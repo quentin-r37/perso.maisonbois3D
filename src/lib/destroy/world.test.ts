@@ -64,6 +64,19 @@ describe('demolition world', () => {
     w.dispose();
   });
 
+  it('once their unlock is over, blown pieces leave the contact filter (it is costly)', () => {
+    resetFx();
+    const w = new DemoWorld(R, chalet());
+    const filtered = () => w.debris.filter((d) => d.colliders[0].activeHooks() !== 0).length;
+    // the pieces that overlap from the start stay filtered for the whole demolition
+    const overlapping = filtered();
+    explode(w, w.center, 16);
+    expect(filtered()).toBeGreaterThan(overlapping);
+    run(w, 0.5);
+    expect(filtered()).toBe(overlapping);
+    w.dispose();
+  });
+
   it('a bomb only blows up what is near it', () => {
     resetFx();
     const w = new DemoWorld(R, chalet());
