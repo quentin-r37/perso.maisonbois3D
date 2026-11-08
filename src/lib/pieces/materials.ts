@@ -67,7 +67,8 @@ function grainTexture(): Texture {
 
 const PAINT_COLORS: Record<Paint, string> = {
   wood: '#d9a066',
-  black: '#2b2826',
+  // the castle pieces: charcoal paint, the wood grain still shows through
+  black: '#4b4b4f',
   light: '#f0d6a8',
   orange: '#e8862a',
   white: '#f6f3ec',
