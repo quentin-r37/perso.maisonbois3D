@@ -37,8 +37,8 @@ const walls: Wall[] = [
   { axis: 'z', ix: W, iz: 0, length: L, longSide: -1 }
 ];
 
-/** 6 courses on the front/back: low, like a farm building. */
-const XTOP = 24;
+/** 7 courses on the front/back: low, like a farm building (just above the doors). */
+const XTOP = 28;
 
 const gables: PieceSpec[] = [
   { type: 'gable', ix: 0, iz: 0, y: XTOP, axis: 'x' },
@@ -50,7 +50,7 @@ export const sheepfold: Model = {
   name: 'The sheepfold',
   description: 'Long logs turned the other way round: a large room for the sheep and a small hay room at the back.',
   level: 3,
-  center: [1.5, 1.4, 2.4],
+  center: [1.5, 1.6, 2.4],
   steps: [
     ...wallSteps({
       walls,

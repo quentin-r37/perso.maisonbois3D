@@ -79,7 +79,8 @@ export const CATALOG: PieceDef[] = [
     kind: 'insert',
     category: 'ouvertures',
     length: 3,
-    h: 20,
+    // 6 courses of logs high
+    h: 24,
     paint: 'red',
     rotations: 4
   },
@@ -90,7 +91,8 @@ export const CATALOG: PieceDef[] = [
     kind: 'insert',
     category: 'ouvertures',
     length: 3,
-    h: 12,
+    // 4 courses of logs high
+    h: 16,
     paint: 'red',
     rotations: 4
   },

@@ -16,7 +16,7 @@ const walls: Wall[] = [
     length: S,
     openings: [
       { type: 'door', at: 1, y: 0, side: -1 },
-      { type: 'window', at: 1, y: 24, side: -1 }
+      { type: 'window', at: 1, y: 28, side: -1 }
     ]
   },
   {
@@ -26,7 +26,7 @@ const walls: Wall[] = [
     length: S,
     openings: [
       { type: 'window', at: 1, y: 8, side: 1 },
-      { type: 'window', at: 1, y: 24, side: 1 }
+      { type: 'window', at: 1, y: 28, side: 1 }
     ]
   },
   { axis: 'z', ix: 0, iz: 0, length: S },
@@ -39,10 +39,10 @@ const walls: Wall[] = [
   }
 ];
 
-/** The floor goes on the side walls, above their 5th course. */
-const FLOOR_Y = 22;
-/** 10 courses on the front/back. */
-const XTOP = 40;
+/** The floor goes on the side walls, above their 7th course (over the door). */
+const FLOOR_Y = 26;
+/** 12 courses on the front/back. */
+const XTOP = 48;
 
 const floor: PieceSpec[] = [
   { type: 'floor-half', ix: 0, iz: 0, y: FLOOR_Y, axis: 'x' },
@@ -59,7 +59,7 @@ export const twoStorey: Model = {
   name: 'The two-storey chalet',
   description: 'A tall chalet of medium logs: a floor between the two storeys, and windows upstairs.',
   level: 3,
-  center: [1.5, 2.4, 1.4],
+  center: [1.5, 2.8, 1.4],
   steps: [
     ...wallSteps({ walls, xTop: XTOP, floor: { y: FLOOR_Y, pieces: floor } }),
     ...roofSteps(gables, { chimney: 4 }),

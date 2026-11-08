@@ -12,8 +12,8 @@ const walls: Wall[] = [
   { axis: 'z', ix: S, iz: 0, length: S, openings: [{ type: 'window', at: 1, y: 6, side: -1 }] }
 ];
 
-/** 6 courses on the front/back: a full log closes the top of the door. */
-const XTOP = 24;
+/** 7 courses on the front/back: a full log closes the top of the door. */
+const XTOP = 28;
 
 const gables: PieceSpec[] = [
   { type: 'gable', ix: 0, iz: 0, y: XTOP, axis: 'x' },
@@ -25,7 +25,7 @@ export const cabane: Model = {
   name: "The woodcutter's hut",
   description: 'A small, quick hut to start with: a door, a window and a gable roof.',
   level: 1,
-  center: [1.5, 1.4, 1.4],
+  center: [1.5, 1.6, 1.4],
   steps: [
     ...wallSteps({ walls, xTop: XTOP }),
     {

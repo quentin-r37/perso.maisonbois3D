@@ -25,8 +25,8 @@ const walls: Wall[] = [
   { axis: 'z', ix: W, iz: 0, length: L, longSide: 1 }
 ];
 
-/** 6 courses on the front/back: a full log closes the top of the doors. */
-const XTOP = 24;
+/** 7 courses on the front/back: a full log closes the top of the doors. */
+const XTOP = 28;
 
 const gables: PieceSpec[] = [
   { type: 'gable', ix: 0, iz: 0, y: XTOP, axis: 'x' },
@@ -38,7 +38,7 @@ export const barn: Model = {
   name: 'The barn',
   description: 'A long, low barn of long logs, with a door at each end and a long roof.',
   level: 1,
-  center: [1.5, 1.4, 2.4],
+  center: [1.5, 1.6, 2.4],
   steps: [
     ...wallSteps({ walls, xTop: XTOP }),
     ...roofSteps(gables, {

@@ -31,7 +31,7 @@ const chaletWalls: Wall[] = [
   },
   { axis: 'z', ix: S, iz: 0, length: S }
 ];
-const CHALET_TOP = 28;
+const CHALET_TOP = 32;
 
 const hutWalls: Wall[] = [
   {
@@ -51,7 +51,7 @@ const hutWalls: Wall[] = [
     openings: [{ type: 'window', at: 1, y: 6, side: -1 }]
   }
 ];
-const HUT_TOP = 24;
+const HUT_TOP = 28;
 
 const gablesAt = (ix: number, y: number): PieceSpec[] => [
   { type: 'gable', ix, iz: 0, y, axis: 'x' },
@@ -80,7 +80,7 @@ export const hamlet: Model = {
   name: 'The hamlet',
   description: 'Two buildings side by side: a chalet with its chimney, a small hut, and a fence in front.',
   level: 3,
-  center: [4.2, 1.6, 1.4],
+  center: [4.2, 1.8, 1.4],
   steps: [
     ...prefixSteps('Chalet', wallSteps({ walls: chaletWalls, xTop: CHALET_TOP })),
     ...prefixSteps('Chalet', roofSteps(chaletGables, { chimney: 4 })),

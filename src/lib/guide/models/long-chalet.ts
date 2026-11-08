@@ -20,8 +20,8 @@ const walls: Wall[] = [
   { axis: 'z', ix: W, iz: 0, length: L, longSide: 1 }
 ];
 
-/** 7 courses on the front/back. */
-const XTOP = 28;
+/** 8 courses on the front/back. */
+const XTOP = 32;
 
 const gables: PieceSpec[] = [
   { type: 'gable', ix: 0, iz: 0, y: XTOP, axis: 'x' },
@@ -33,7 +33,7 @@ export const longChalet: Model = {
   name: 'The long chalet',
   description: 'A bigger chalet built with long logs, with an entrance and a large room, and a long roof.',
   level: 3,
-  center: [1.5, 1.6, 2.4],
+  center: [1.5, 1.8, 2.4],
   steps: [
     ...wallSteps({ walls, xTop: XTOP }),
     {
