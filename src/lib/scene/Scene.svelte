@@ -16,8 +16,12 @@
   import Demolition from './Demolition.svelte';
   import DemolitionFx from './DemolitionFx.svelte';
   import { fx } from '../destroy/fx';
+  import { countFrame } from '../ui/fps.svelte';
 
-  const { scene, renderer } = useThrelte();
+  const { scene, renderer, renderStage } = useThrelte();
+
+  // frame counter: a task of the render stage only runs on the frames really drawn
+  useTask(countFrame, { stage: renderStage, autoInvalidate: false });
 
   const BG = '#efe4d2';
   scene.background = new Color(BG);

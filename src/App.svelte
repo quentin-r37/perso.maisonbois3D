@@ -13,6 +13,7 @@
   import { MODELS } from './lib/guide/models';
   import { getDef } from './lib/pieces/catalog';
   import { EFFECTS } from './lib/ui/demolition';
+  import { fps } from './lib/ui/fps.svelte';
 
   const coarse = typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches;
 
@@ -44,6 +45,10 @@
     const k = e.key.toLowerCase();
     if (app.helpOpen) {
       if (k === 'escape') app.helpOpen = false;
+      return;
+    }
+    if (k === 'f' && !e.ctrlKey && !e.metaKey) {
+      app.toggleFps();
       return;
     }
     // demolition: 1-4 fire an effect, Esc / X rebuild; the building shortcuts are off
@@ -173,6 +178,20 @@
     {/if}
   </div>
 
+  {#if app.showFps}
+    <div
+      class="fps"
+      class:guide={app.mode === 'guide' && !app.demo.active}
+      class:demo={app.demo.active}
+      class:slow={fps.rate > 0 && fps.rate < 50}
+      class:bad={fps.rate > 0 && fps.rate < 30}
+      title="Frame rate (F to hide) · longest frame of the last half second"
+      aria-hidden="true"
+    >
+      {#if fps.rate}<b>{fps.rate}</b> fps · {fps.worst} ms{:else}idle{/if}
+    </div>
+  {/if}
+
   {#if app.toast}
     {#key app.toast.id}
       <div class="toast {app.toast.kind}" role="status">{app.toast.text}</div>
@@ -202,6 +221,7 @@
               <li><b>Drag</b>: turn the camera · <b>wheel</b>: zoom</li>
               <li><b>Ctrl+Z</b> / <b>Ctrl+Y</b>: undo / redo</li>
               <li><b>X</b>: demolish! (then <b>Esc</b> to rebuild)</li>
+              <li><b>F</b>: show / hide the frame rate</li>
             </ul>
           </div>
           <div>
@@ -368,6 +388,32 @@
     color: #fff;
     background: var(--green);
   }
+  .fps {
+    position: absolute;
+    right: 16px;
+    bottom: 16px;
+    pointer-events: none;
+    font: 12px/1 ui-monospace, 'Cascadia Mono', Consolas, monospace;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-soft);
+    background: color-mix(in srgb, var(--paper) 88%, transparent);
+    padding: 5px 9px;
+    border-radius: 99px;
+    box-shadow: 0 1px 4px rgba(60, 40, 20, 0.12);
+  }
+  .fps b {
+    color: var(--green);
+  }
+  .fps.slow b {
+    color: #d07a00;
+  }
+  .fps.bad b {
+    color: var(--red);
+  }
+  /* beside the booklet */
+  .fps.guide {
+    right: 332px;
+  }
   .toast {
     position: absolute;
     top: 84px;
@@ -493,6 +539,15 @@
     }
     .toast {
       top: 64px;
+    }
+    /* above the piece box / the demolition bar */
+    .fps,
+    .fps.guide {
+      right: 10px;
+      bottom: 178px;
+    }
+    .fps.demo {
+      bottom: 128px;
     }
     .cols {
       grid-template-columns: 1fr;

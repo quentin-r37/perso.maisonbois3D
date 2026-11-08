@@ -199,7 +199,7 @@ export class DemoWorld {
     // a collapse never settle — they jitter, hop and "dance" instead of falling asleep
     // (measured: ~10x fewer restless pieces a few seconds after a bomb or a quake, for a
     // step cost that barely changes)
-    this.world.numSolverIterations = 4;
+    this.world.numSolverIterations = 2;
     this.#events = new R.EventQueue(true);
 
     // floor: kinematic so the quake can shake it

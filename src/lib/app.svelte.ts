@@ -116,6 +116,8 @@ class AppState {
   toast = $state.raw<Toast | null>(null);
   celebrating = $state(false);
   helpOpen = $state(false);
+  /** Frame rate counter in the corner (F). */
+  showFps = $state(true);
   lastHit: Hit | null = null;
   /** Shift held: no magnet toward the notches, the piece goes exactly under the cursor. */
   freePlace = $state(false);
@@ -133,16 +135,17 @@ class AppState {
   #toastTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor() {
-    const prefs = readJSON<{ mode?: Mode; muted?: boolean; seenHelp?: boolean }>('chalet.prefs.v1', {});
+    const prefs = readJSON<{ mode?: Mode; muted?: boolean; seenHelp?: boolean; showFps?: boolean }>('chalet.prefs.v1', {});
     this.mode = prefs.mode === 'guide' ? 'guide' : 'libre';
     this.muted = !!prefs.muted;
     this.helpOpen = !prefs.seenHelp;
+    this.showFps = prefs.showFps ?? true;
     setMuted(this.muted);
     if (this.mode === 'guide') this.#autoSelectForStep();
   }
 
   savePrefs() {
-    writeStorage('chalet.prefs.v1', { mode: this.mode, muted: this.muted, seenHelp: true });
+    writeStorage('chalet.prefs.v1', { mode: this.mode, muted: this.muted, seenHelp: true, showFps: this.showFps });
     writeStorage('chalet.guide.model.v1', this.guide.modelId);
   }
 
@@ -160,6 +163,11 @@ class AppState {
     this.tool = 'build';
     this.celebrating = false;
     if (mode === 'guide') this.#autoSelectForStep();
+    this.savePrefs();
+  }
+
+  toggleFps() {
+    this.showFps = !this.showFps;
     this.savePrefs();
   }
 
