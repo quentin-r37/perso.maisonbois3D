@@ -5,6 +5,7 @@
   import type { Hit } from '../build/placement';
   import { getDef, isRoofKind } from '../pieces/catalog';
   import { unlockAudio } from '../audio/sfx';
+  import { isOpenable } from '../pieces/geometry';
 
   const { camera, scene, dom, invalidate } = useThrelte();
 
@@ -89,7 +90,18 @@
 
   const wantsRoof = () => !!app.selected && isRoofKind(getDef(app.selected).kind);
 
+  /** Door or shuttered window under the pointer (the first piece hit, if it opens). */
+  function doorAt(clientX: number, clientY: number): number | null {
+    const uid = pieceAt(clientX, clientY);
+    const p = uid == null ? undefined : app.build.pieces.find((q) => q.uid === uid);
+    return p && isOpenable(p.type) ? p.uid : null;
+  }
+
   function hover(e: PointerEvent) {
+    if (app.tool === 'door') {
+      app.hoverUid = doorAt(e.clientX, e.clientY);
+      return;
+    }
     if (app.tool === 'erase') {
       app.hoverUid = pieceAt(e.clientX, e.clientY);
       return;
@@ -177,6 +189,12 @@
       if (uid != null) app.erase(uid);
       return;
     }
+    if (app.tool === 'door') {
+      const uid = doorAt(e.clientX, e.clientY);
+      if (uid != null) app.toggleDoor(uid);
+      invalidate();
+      return;
+    }
     if (isTouch) {
       // tap: show the ghost and wait for confirmation (or a 2nd tap in the same spot)
       const prev = app.pending ? app.ghost : null;
@@ -213,7 +231,12 @@
   const onContext = (e: Event) => e.preventDefault();
 
   $effect(() => {
-    dom.style.cursor = app.demo.phase === 'running' && app.demo.effect === 'bomb' ? 'crosshair' : '';
+    dom.style.cursor =
+      app.demo.phase === 'running' && app.demo.effect === 'bomb'
+        ? 'crosshair'
+        : app.tool === 'door' && app.hoverUid != null
+          ? 'pointer'
+          : '';
   });
 
   $effect(() => {

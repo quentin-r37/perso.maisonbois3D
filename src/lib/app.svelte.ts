@@ -15,13 +15,14 @@ import {
 } from './build/placement';
 import { DEFAULT_MODEL_ID, getModel, type Model } from './guide/models';
 import { getDef, isRoofKind } from './pieces/catalog';
-import { bonk, chime, fanfare, pop, setMuted } from './audio/sfx';
+import { bonk, chime, clack, fanfare, pop, setMuted } from './audio/sfx';
 import { axisSideToRot } from './build/grid';
 import { loadRapier } from './destroy/rapier';
 import { DemoWorld } from './destroy/world';
+import { getOpenableGeometry } from './pieces/geometry';
 
 export type Mode = 'libre' | 'guide';
-export type Tool = 'build' | 'erase';
+export type Tool = 'build' | 'erase' | 'door';
 export type DemoEffect = 'explosion' | 'tornado' | 'quake' | 'bomb';
 
 /** One demolition effect to fire (a new object each time, even for the same effect). */
@@ -190,6 +191,23 @@ class AppState {
     this.pending = false;
     this.ghost = null;
     this.hoverUid = null;
+  }
+
+  /**
+   * Opens a door / the shutters of a window (ajar or closed), or closes them (open).
+   * False if the piece has nothing to open.
+   */
+  toggleDoor(uid: number): boolean {
+    const build = this.build;
+    const piece = build.pieces.find((p) => p.uid === uid);
+    const geo = piece && getOpenableGeometry(piece.type);
+    if (!geo) return false;
+    // as modeled, the doors are ajar (not open) and the shutters open
+    const wasOpen = build.doors.get(uid) ?? geo.leaves.every((l) => l.ajar >= l.open);
+    const open = !wasOpen;
+    build.doors.set(uid, open);
+    clack(open ? 0.35 : 0.7);
+    return true;
   }
 
   rotate(dir = 1) {

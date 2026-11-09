@@ -84,9 +84,11 @@
       app.rotate(e.shiftKey ? -1 : 1);
     } else if (k === 'e' || k === 'delete' || k === 'backspace') {
       app.setTool(app.tool === 'erase' ? 'build' : 'erase');
+    } else if (k === 'o') {
+      app.setTool(app.tool === 'door' ? 'build' : 'door');
     } else if (k === 'escape') {
       if (app.pending) app.pending = false;
-      else if (app.tool === 'erase') app.setTool('build');
+      else if (app.tool !== 'build') app.setTool('build');
       else app.select(null);
     } else if (k === 'enter' && app.pending) {
       app.placeGhost();
@@ -162,6 +164,8 @@
       </span>
     {:else if app.tool === 'erase'}
       <span class="chip erase">Eraser: {coarse ? 'tap' : 'click'} a piece to remove it</span>
+    {:else if app.tool === 'door'}
+      <span class="chip">🚪 {coarse ? 'Tap' : 'Click'} a door or a window to open or close it</span>
     {:else if app.ghost && !app.ghost.ok && app.ghost.reason}
       <span class="chip warn">✋ {app.ghost.reason}</span>
     {:else if app.ghost?.loose}
@@ -218,6 +222,7 @@
               <li><b>Click</b>: place the piece</li>
               <li><b>R</b>: rotate</li>
               <li><b>Right click</b>: remove</li>
+              <li><b>O</b>: open / close doors and shutters (then click one)</li>
               <li><b>Drag</b>: turn the camera · <b>wheel</b>: zoom</li>
               <li><b>Ctrl+Z</b> / <b>Ctrl+Y</b>: undo / redo</li>
               <li><b>X</b>: demolish! (then <b>Esc</b> to rebuild)</li>
@@ -229,6 +234,7 @@
             <ul>
               <li><b>Tap</b>: preview, then <b>✓ Place</b> (or tap again)</li>
               <li><b>Long press</b>: remove a piece</li>
+              <li><b>✋ button</b>: then tap a door or window to open / close it</li>
               <li><b>1 finger</b>: turn · <b>2 fingers</b>: zoom</li>
             </ul>
           </div>

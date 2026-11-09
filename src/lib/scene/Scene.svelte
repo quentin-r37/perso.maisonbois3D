@@ -113,6 +113,7 @@
   {#each build.pieces as piece (piece.uid)}
     <Piece
       {piece}
+      doorOpen={build.doors.get(piece.uid)}
       animate={build.consumeFresh(piece.uid)}
       highlight={app.tool === 'erase' && app.hoverUid === piece.uid}
       hidden={app.demo.active}

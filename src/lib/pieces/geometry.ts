@@ -286,21 +286,32 @@ function panel(x0: number, x1: number, h: number, hole?: Path): Shape {
   return s;
 }
 
-/**
- * Leaf hinged at `hinge`, built in the XY plane (x from the hinge), opening toward +z.
- * dir = 1: leaf extends toward +x; dir = -1: toward -x.
- */
-function hingedLeaf(shape: Shape, t: number, paint: Paint, hinge: [number, number, number], angle: number, dir: 1 | -1): Part {
-  const m = new Matrix4().multiplyMatrices(mat(hinge, [0, -angle * dir, 0]), mat([0, 0, t / 2]));
-  return extrude(shape, t, paint, m, 0.01);
+/** A door leaf, built from its hinge (x from 0 toward `dir`, opening toward +z). */
+interface Leaf {
+  parts: Part[];
+  /** Hinge position in the piece frame. */
+  hinge: [number, number, number];
+  dir: 1 | -1;
+  /** Angle as modeled (catalog, ghost, demolition): the doors ajar, the shutters open. */
+  ajar: number;
+  /** Angle when the player opens it (closed: 0). */
+  open: number;
 }
 
-function doorParts(L: number, hq: number): Part[] {
+interface DoorParts {
+  frame: Part[];
+  leaves: Leaf[];
+}
+
+/** Rotation of a leaf around its hinge (opening toward +z). */
+const leafMatrix = (l: Leaf, angle: number) => mat(l.hinge, [0, -angle * l.dir, 0]);
+
+function redDoor(L: number, hq: number): DoorParts {
   const H = hq * Q;
   const x0 = FRAME_X0;
   const x1 = L * G - FRAME_X0;
   const d = LOG_W * 1.1;
-  const parts: Part[] = [
+  const frame: Part[] = [
     // white frame; the posts also fill the empty notches of the neighboring logs
     rbox(x0 - JAMB, x0 + POST, 0, H, -d / 2, d / 2, 'white'),
     rbox(x1 - POST, x1 + JAMB, 0, H, -d / 2, d / 2, 'white'),
@@ -314,18 +325,25 @@ function doorParts(L: number, hq: number): Part[] {
   const t = 0.05;
   const hingeZ = d / 2 - 0.02;
   const s = 0.24;
-  const openL = 1.0;
-  const openR = 0.3;
-  parts.push(
-    hingedLeaf(panel(0, lw, lh, horseHole(lw / 2, lh * 0.74, s, 1)), t, 'red', [inner0, 0.05, hingeZ], openL, 1),
-    hingedLeaf(panel(-lw, 0, lh, horseHole(-lw / 2, lh * 0.74, s, -1)), t, 'red', [inner1, 0.05, hingeZ], openR, -1)
-  );
   const k = lw - 0.07;
-  parts.push(
-    rboxAt([0.04, 0.04, 0.07], [inner0 + Math.cos(openL) * k, lh * 0.45, hingeZ + Math.sin(openL) * k + 0.05], [0, -openL, 0], 'dark', 0.015),
-    rboxAt([0.04, 0.04, 0.07], [inner1 - Math.cos(openR) * k, lh * 0.45, hingeZ + Math.sin(openR) * k + 0.05], [0, openR, 0], 'dark', 0.015)
-  );
-  return parts;
+  const leaf = (dir: 1 | -1, hingeX: number, ajar: number): Leaf => ({
+    parts: [
+      extrude(
+        dir > 0 ? panel(0, lw, lh, horseHole(lw / 2, lh * 0.74, s, 1)) : panel(-lw, 0, lh, horseHole(-lw / 2, lh * 0.74, s, -1)),
+        t,
+        'red',
+        mat([0, 0, t / 2]),
+        0.01
+      ),
+      // knob
+      rboxAt([0.04, 0.04, 0.07], [dir * k, lh * 0.45 - 0.05, 0.05], [0, 0, 0], 'dark', 0.015)
+    ],
+    hinge: [hingeX, 0.05, hingeZ],
+    dir,
+    ajar,
+    open: 1.5
+  });
+  return { frame, leaves: [leaf(1, inner0, 1.0), leaf(-1, inner1, 0.3)] };
 }
 
 /** Moves parts built in their own frame (a leaf) to their place. */
@@ -359,14 +377,14 @@ function plankLeaf(w: number, h: number, t: number, dir: 1 | -1): Part[] {
   return parts;
 }
 
-/** Wooden double door: black frame and lintel (crenel paint), plank leaves (the left one ajar). */
-function castleDoorParts(L: number, hq: number): Part[] {
+/** Wooden double door: black frame and lintel (crenel paint), plank leaves (modeled with the left one ajar). */
+function castleDoor(L: number, hq: number): DoorParts {
   const H = hq * Q;
   const x0 = FRAME_X0;
   const x1 = L * G - FRAME_X0;
   const d = LOG_W * 1.1;
   const lintel = 0.16;
-  const parts: Part[] = [
+  const frame: Part[] = [
     // the posts also fill the empty notches of the neighboring logs
     rbox(x0 - JAMB, x0 + POST, 0, H - lintel, -d / 2, d / 2, 'black'),
     rbox(x1 - POST, x1 + JAMB, 0, H - lintel, -d / 2, d / 2, 'black'),
@@ -379,16 +397,19 @@ function castleDoorParts(L: number, hq: number): Part[] {
   const lh = H - lintel - 0.06;
   const t = 0.06;
   const hingeZ = d / 2 - t - 0.012;
-  const openL = 0.55;
-  parts.push(
-    ...moved(plankLeaf(lw, lh, t, 1), mat([inner0, 0.045, hingeZ], [0, -openL, 0])),
-    ...moved(plankLeaf(lw, lh, t, -1), mat([inner1, 0.045, hingeZ]))
-  );
   // big hinge pins on the frame
   for (const x of [inner0, inner1])
     for (const y of [0.267, 0.045 + lh / 2, 0.045 + lh - 0.26])
-      parts.push({ geo: finalize(new CylinderGeometry(0.022, 0.022, 0.1, 12), mat([x, y, hingeZ + t + 0.01]), false), paint: 'iron' });
-  return parts;
+      frame.push({ geo: finalize(new CylinderGeometry(0.022, 0.022, 0.1, 12), mat([x, y, hingeZ + t + 0.01]), false), paint: 'iron' });
+  const leaf = (dir: 1 | -1, hingeX: number, ajar: number): Leaf => ({
+    parts: plankLeaf(lw, lh, t, dir),
+    hinge: [hingeX, 0.045, hingeZ],
+    dir,
+    ajar,
+    // the leaves sit inside the frame depth: not quite square, or they go through the posts
+    open: 1.35
+  });
+  return { frame, leaves: [leaf(1, inner0, 0.55), leaf(-1, inner1, 0)] };
 }
 
 /** Window-sized grille: black frame (crenel paint), round iron bars held by two flat crossbars. */
@@ -419,7 +440,7 @@ function grilleParts(L: number, hq: number): Part[] {
   return parts;
 }
 
-function windowParts(L: number, hq: number): Part[] {
+function windowWithShutters(L: number, hq: number): DoorParts {
   const H = hq * Q;
   const x0 = FRAME_X0;
   const x1 = L * G - FRAME_X0;
@@ -449,20 +470,35 @@ function windowParts(L: number, hq: number): Part[] {
     const y = j0 + ((j1 - j0) * j) / 3;
     parts.push(rbox(i0, i1, y - bar / 2, y + bar / 2, -barD / 2, barD / 2, 'white', 0));
   }
-  // red shutters opened outward (+z), with a little fir tree cut out.
-  // One step beside the frame is the chalet corner, whose crossing heads stick out by
-  // OVERHANG: folded flat, the shutters would go through them, so they stay half-open
-  // (~54° from the wall) and pass in front of the heads.
-  const sw = (i1 - i0) / 2 + 0.03;
+  // red shutters opening outward (+z), with a little fir tree cut out; closed, they meet
+  // in the middle. One step beside the frame is the chalet corner, whose crossing heads
+  // stick out by OVERHANG: folded flat, the shutters would go through them, so open they
+  // stay half-folded (~54° from the wall) and pass in front of the heads.
+  const sw = (x1 - x0) / 2 + JAMB - 0.005;
   const sh = H - 0.14;
   const t = 0.05;
   const zf = d / 2 + 0.03;
   const fold = Math.PI - 0.95;
-  parts.push(
-    hingedLeaf(panel(0, sw, sh, treeHole(sw / 2, sh * 0.6, 0.16)), t, 'red', [x0 - JAMB, 0.07, zf], fold, 1),
-    hingedLeaf(panel(-sw, 0, sh, treeHole(-sw / 2, sh * 0.6, 0.16)), t, 'red', [x1 + JAMB, 0.07, zf], fold, -1)
-  );
-  return parts;
+  const shutter = (dir: 1 | -1, hingeX: number): Leaf => ({
+    parts: [
+      extrude(
+        dir > 0 ? panel(0, sw, sh, treeHole(sw / 2, sh * 0.6, 0.16)) : panel(-sw, 0, sh, treeHole(-sw / 2, sh * 0.6, 0.16)),
+        t,
+        'red',
+        mat([0, 0, t / 2]),
+        0.01
+      )
+    ],
+    hinge: [hingeX, 0.07, zf],
+    dir,
+    ajar: fold,
+    open: fold
+  });
+  return { frame: parts, leaves: [shutter(1, x0 - JAMB), shutter(-1, x1 + JAMB)] };
+}
+
+function windowParts(L: number, hq: number): Part[] {
+  return posedDoor(windowWithShutters(L, hq));
 }
 
 // ---------------------------------------------------------------------------
@@ -868,11 +904,56 @@ function crownedKnightParts(): Part[] {
 
 // ---------------------------------------------------------------------------
 
+/** Pieces with leaves that open and close: doors, and the window's shutters. */
+const DOORS: Record<string, (L: number, hq: number) => DoorParts> = {
+  door: redDoor,
+  'door-castle': castleDoor,
+  window: windowWithShutters
+};
+
+/** Door / window as modeled: frame + leaves at their ajar angle, all in one piece. */
+function posedDoor(d: DoorParts): Part[] {
+  return [...d.frame, ...d.leaves.flatMap((l) => moved(l.parts, leafMatrix(l, l.ajar)))];
+}
+
 const INSERTS: Record<string, (L: number, hq: number) => Part[]> = {
-  door: doorParts,
-  'door-castle': castleDoorParts,
+  door: (L, hq) => posedDoor(redDoor(L, hq)),
+  'door-castle': (L, hq) => posedDoor(castleDoor(L, hq)),
   grille: grilleParts
 };
+
+export const isOpenable = (type: string) => shapeOf(type) in DOORS;
+
+export interface DoorLeafGeometry {
+  geometry: PieceGeometry;
+  hinge: [number, number, number];
+  dir: 1 | -1;
+  ajar: number;
+  open: number;
+}
+
+/** Door / window split for animation: the fixed frame, and each leaf in its hinge frame (rotate it around Y). */
+export interface OpenableGeometry {
+  frame: PieceGeometry;
+  leaves: DoorLeafGeometry[];
+}
+
+const doorCache = new Map<string, OpenableGeometry>();
+
+export function getOpenableGeometry(type: string): OpenableGeometry | null {
+  if (!isOpenable(type)) return null;
+  let g = doorCache.get(type);
+  if (!g) {
+    const def = getDef(type);
+    const d = DOORS[shapeOf(type)](def.length, def.h);
+    g = {
+      frame: mergeParts(d.frame),
+      leaves: d.leaves.map(({ parts, hinge, dir, ajar, open }) => ({ geometry: mergeParts(parts), hinge, dir, ajar, open }))
+    };
+    doorCache.set(type, g);
+  }
+  return g;
+}
 
 const cache = new Map<string, PieceGeometry>();
 

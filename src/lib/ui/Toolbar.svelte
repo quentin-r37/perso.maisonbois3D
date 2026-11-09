@@ -89,6 +89,15 @@
     >
       <Icon name="eraser" />
     </button>
+    <button
+      class="icon"
+      class:active={app.tool === 'door'}
+      title="Open / close doors and shutters (O)"
+      disabled={demo}
+      onclick={() => app.setTool(app.tool === 'door' ? 'build' : 'door')}
+    >
+      <Icon name="hand" />
+    </button>
     <div class="menu-wrap">
       <button
         class="icon boom"

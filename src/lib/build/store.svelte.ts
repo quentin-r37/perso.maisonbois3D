@@ -1,3 +1,4 @@
+import { SvelteMap } from 'svelte/reactivity';
 import { onSubGrid, type PieceSpec, type PlacedPiece } from './grid';
 import { buildIndex, normalize, specKey } from './snap';
 import { findRoofs } from './roof';
@@ -51,6 +52,9 @@ export class BuildStore {
 
   canUndo = $derived(this.#undo.length > 0);
   canRedo = $derived(this.#redo.length > 0);
+
+  /** Doors / shutters the player opened (true) or closed (false); absent: as modeled. Not saved. */
+  doors = new SvelteMap<number, boolean>();
 
   /** Pieces that should play the drop animation when they appear. */
   fresh = new Set<number>();
@@ -113,6 +117,7 @@ export class BuildStore {
   }
 
   load(specs: PieceSpec[], animate = false) {
+    this.doors.clear();
     this.#undo = [];
     this.#redo = [];
     this.fresh.clear();

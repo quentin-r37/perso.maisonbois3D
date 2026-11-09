@@ -1,26 +1,59 @@
 <script lang="ts">
   import { T, useTask } from '@threlte/core';
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { LessEqualDepth, MeshBasicMaterial } from 'three';
   import type { PlacedPiece } from '../build/grid';
   import { transformOf } from '../build/transform';
-  import { getGeometry } from '../pieces/geometry';
+  import { getOpenableGeometry, getGeometry } from '../pieces/geometry';
   import { materialsFor } from '../pieces/materials';
   import { clack } from '../audio/sfx';
 
   interface Props {
     piece: PlacedPiece;
+    /** Door / shutters: open (true), closed (false), as modeled (undefined). */
+    doorOpen?: boolean;
     animate?: boolean;
     highlight?: boolean;
     /** Hidden (during a demolition: debris stand in for the pieces, which stay mounted). */
     hidden?: boolean;
   }
 
-  let { piece, animate = false, highlight = false, hidden = false }: Props = $props();
+  let { piece, doorOpen, animate = false, highlight = false, hidden = false }: Props = $props();
 
   const geo = $derived(getGeometry(piece));
   const mats = $derived(materialsFor(geo.paints, piece.uid % 3));
   const t = $derived(transformOf(piece));
+
+  // Doors and shuttered windows: fixed frame + leaves turning on their hinges.
+  const door = $derived(getOpenableGeometry(piece.type));
+  const frameMats = $derived(door ? materialsFor(door.frame.paints, piece.uid % 3) : []);
+  const leafMats = $derived(door ? door.leaves.map((l) => materialsFor(l.geometry.paints, piece.uid % 3)) : []);
+  const leafTargets = $derived(door ? door.leaves.map((l) => (doorOpen === undefined ? l.ajar : doorOpen ? l.open : 0)) : []);
+  // svelte-ignore state_referenced_locally
+  let leafAngles = $state(leafTargets.slice());
+
+  const swing = useTask(
+    (delta) => {
+      const k = 1 - Math.exp(-Math.min(delta, 1 / 20) * 9);
+      let moving = false;
+      leafAngles = leafAngles.map((a, i) => {
+        const target = leafTargets[i] ?? a;
+        const d = target - a;
+        if (Math.abs(d) < 0.002) return target;
+        moving = true;
+        return a + d * k;
+      });
+      if (!moving) swing.stop();
+    },
+    { autoStart: false }
+  );
+
+  $effect(() => {
+    const targets = leafTargets;
+    untrack(() => {
+      if (targets.some((a, i) => a !== leafAngles[i])) swing.start();
+    });
+  });
 
   // Drop animation: fall + small bounce, "clack" on impact.
   const START = 1.1;
@@ -56,7 +89,10 @@
       vel = -2;
       start();
     }
-    return () => stop();
+    return () => {
+      stop();
+      swing.stop();
+    };
   });
 </script>
 
@@ -74,14 +110,35 @@
 </script>
 
 <T.Group position={[t.position[0], t.position[1] + offset, t.position[2]]} rotation.y={t.rotationY} visible={!hidden}>
-  <T.Mesh
-    geometry={geo.geometry}
-    material={mats}
-    castShadow
-    receiveShadow
-    userData={{ pick: 'piece', uid: piece.uid }}
-  />
-  {#if highlight}
-    <T.Mesh geometry={geo.geometry} material={highlightMat} renderOrder={2} />
+  {#if door}
+    <T.Mesh geometry={door.frame.geometry} material={frameMats} castShadow receiveShadow userData={{ pick: 'piece', uid: piece.uid }} />
+    {#if highlight}
+      <T.Mesh geometry={door.frame.geometry} material={highlightMat} renderOrder={2} />
+    {/if}
+    {#each door.leaves as leaf, i (i)}
+      <T.Group position={leaf.hinge} rotation.y={-(leafAngles[i] ?? leaf.ajar) * leaf.dir}>
+        <T.Mesh
+          geometry={leaf.geometry.geometry}
+          material={leafMats[i]}
+          castShadow
+          receiveShadow
+          userData={{ pick: 'piece', uid: piece.uid }}
+        />
+        {#if highlight}
+          <T.Mesh geometry={leaf.geometry.geometry} material={highlightMat} renderOrder={2} />
+        {/if}
+      </T.Group>
+    {/each}
+  {:else}
+    <T.Mesh
+      geometry={geo.geometry}
+      material={mats}
+      castShadow
+      receiveShadow
+      userData={{ pick: 'piece', uid: piece.uid }}
+    />
+    {#if highlight}
+      <T.Mesh geometry={geo.geometry} material={highlightMat} renderOrder={2} />
+    {/if}
   {/if}
 </T.Group>
