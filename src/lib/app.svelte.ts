@@ -20,6 +20,7 @@ import { axisSideToRot } from './build/grid';
 import { loadRapier } from './destroy/rapier';
 import { DemoWorld } from './destroy/world';
 import { getOpenableGeometry } from './pieces/geometry';
+import { isSoftwareRenderer, MAX_QUALITY } from './ui/quality';
 
 export type Mode = 'libre' | 'guide';
 export type Tool = 'build' | 'erase' | 'door';
@@ -119,6 +120,8 @@ class AppState {
   helpOpen = $state(false);
   /** Frame rate counter in the corner (F). */
   showFps = $state(true);
+  /** Rendering quality, index into QUALITY (slider of the frame rate counter). */
+  quality = $state(MAX_QUALITY);
   lastHit: Hit | null = null;
   /** Shift held: no magnet toward the notches, the piece goes exactly under the cursor. */
   freePlace = $state(false);
@@ -136,17 +139,33 @@ class AppState {
   #toastTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor() {
-    const prefs = readJSON<{ mode?: Mode; muted?: boolean; seenHelp?: boolean; showFps?: boolean }>('chalet.prefs.v1', {});
+    const prefs = readJSON<{ mode?: Mode; muted?: boolean; seenHelp?: boolean; showFps?: boolean; quality?: number }>(
+      'chalet.prefs.v1',
+      {}
+    );
     this.mode = prefs.mode === 'guide' ? 'guide' : 'libre';
     this.muted = !!prefs.muted;
     this.helpOpen = !prefs.seenHelp;
     this.showFps = prefs.showFps ?? true;
+    // no saved choice: start low when the GPU isn't there (rendering on the CPU)
+    this.quality =
+      typeof prefs.quality === 'number'
+        ? Math.max(0, Math.min(MAX_QUALITY, Math.round(prefs.quality)))
+        : isSoftwareRenderer()
+          ? 0
+          : MAX_QUALITY;
     setMuted(this.muted);
     if (this.mode === 'guide') this.#autoSelectForStep();
   }
 
   savePrefs() {
-    writeStorage('chalet.prefs.v1', { mode: this.mode, muted: this.muted, seenHelp: true, showFps: this.showFps });
+    writeStorage('chalet.prefs.v1', {
+      mode: this.mode,
+      muted: this.muted,
+      seenHelp: true,
+      showFps: this.showFps,
+      quality: this.quality
+    });
     writeStorage('chalet.guide.model.v1', this.guide.modelId);
   }
 
@@ -169,6 +188,11 @@ class AppState {
 
   toggleFps() {
     this.showFps = !this.showFps;
+    this.savePrefs();
+  }
+
+  setQuality(level: number) {
+    this.quality = Math.max(0, Math.min(MAX_QUALITY, Math.round(level)));
     this.savePrefs();
   }
 

@@ -1,7 +1,8 @@
 <script lang="ts">
   import { Canvas } from '@threlte/core';
-  import { ACESFilmicToneMapping, PCFSoftShadowMap } from 'three';
+  import { ACESFilmicToneMapping, WebGLRenderer } from 'three';
   import { onMount } from 'svelte';
+  import { devicePixelRatio } from 'svelte/reactivity/window';
   import Scene from './lib/scene/Scene.svelte';
   import PiecePalette from './lib/ui/PiecePalette.svelte';
   import Toolbar from './lib/ui/Toolbar.svelte';
@@ -14,6 +15,16 @@
   import { getDef } from './lib/pieces/catalog';
   import { EFFECTS } from './lib/ui/demolition';
   import { fps } from './lib/ui/fps.svelte';
+  import { QUALITY } from './lib/ui/quality';
+
+  const quality = $derived(QUALITY[app.quality]);
+  // same clamp as the original dpr={[1, 2]}, then scaled down by the quality level
+  const dpr = $derived(Math.min(Math.max(devicePixelRatio.current ?? 1, 1), 2) * quality.scale);
+
+  // antialiasing can only be chosen when the WebGL context is created: it follows the
+  // quality of the launch (multisampling is a big cost when the CPU does the drawing)
+  const createRenderer = (canvas: HTMLCanvasElement) =>
+    new WebGLRenderer({ canvas, powerPreference: 'high-performance', antialias: app.quality >= 2, alpha: true });
 
   const coarse = typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches;
 
@@ -110,7 +121,7 @@
 
 <main>
   <div class="stage">
-    <Canvas toneMapping={ACESFilmicToneMapping} shadows={PCFSoftShadowMap} dpr={[1, 2]}>
+    <Canvas {createRenderer} toneMapping={ACESFilmicToneMapping} shadows={quality.shadows} {dpr}>
       <Scene />
     </Canvas>
   </div>

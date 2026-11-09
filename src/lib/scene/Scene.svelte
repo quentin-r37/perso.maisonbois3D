@@ -1,7 +1,8 @@
 <script lang="ts">
   import { T, useTask, useThrelte } from '@threlte/core';
   import { OrbitControls } from '@threlte/extras';
-  import { Color, Fog, Group, HemisphereLight, PMREMGenerator } from 'three';
+  import { Color, DirectionalLight, Fog, Group, HemisphereLight, PMREMGenerator } from 'three';
+  import { QUALITY } from '../ui/quality';
   import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
   import { app } from '../app.svelte';
   import { getDef, isRoofKind } from '../pieces/catalog';
@@ -18,7 +19,7 @@
   import { fx } from '../destroy/fx';
   import { countFrame } from '../ui/fps.svelte';
 
-  const { scene, renderer, renderStage } = useThrelte();
+  const { scene, renderer, renderStage, invalidate } = useThrelte();
 
   // frame counter: a task of the render stage only runs on the frames really drawn
   useTask(countFrame, { stage: renderStage, autoInvalidate: false });
@@ -43,6 +44,22 @@
       ? app.guide.remaining.filter((p) => specKey(p) !== ghostKey)
       : []
   );
+
+  // quality slider: shadows on/off and their resolution. Turning castShadow off (and not
+  // only the renderer's shadow map) changes the lights' state, so three recompiles the
+  // materials without the shadow lookup instead of sampling a stale map.
+  const sunShadows = $derived(QUALITY[app.quality].shadows !== false);
+  const shadowSize = $derived(QUALITY[app.quality].shadowSize);
+  let sun: DirectionalLight | undefined = $state();
+  $effect(() => {
+    const size = shadowSize;
+    if (!sun || sun.shadow.mapSize.x === size) return;
+    sun.shadow.mapSize.set(size, size);
+    // the map is created at its size once: drop it, three makes a new one on the next frame
+    sun.shadow.map?.dispose();
+    sun.shadow.map = null;
+    invalidate();
+  });
 
   // explosion flash: the ambient light flares up (adding a light would recompile every shader)
   const HEMI = 0.9;
@@ -86,11 +103,11 @@
 
 <T.HemisphereLight bind:ref={hemi} args={['#fff6e8', '#8a6a4a', HEMI]} />
 <T.DirectionalLight
+  bind:ref={sun}
   position={[-5, 11, -7]}
   intensity={2.4}
   color="#fff1dc"
-  castShadow
-  shadow.mapSize={[2048, 2048]}
+  castShadow={sunShadows}
   shadow.camera.left={-9}
   shadow.camera.right={9}
   shadow.camera.top={9}

@@ -4,6 +4,7 @@
   import { getDef } from '../pieces/catalog';
   import Icon from './Icon.svelte';
   import { EFFECTS } from './demolition';
+  import { MAX_QUALITY, QUALITY } from './quality';
 
   let menuOpen = $state(false);
   let confirmClear = $state(false);
@@ -139,6 +140,26 @@
             <Icon name="trash" size={18} />
             {confirmClear ? 'Confirm?' : app.mode === 'guide' ? 'Start the model over' : 'Clear everything'}
           </button>
+          <div class="settings">
+            <div class="heading">Settings</div>
+            <label class="row" title="Resolution and shadows: lower it if the view is slow">
+              <span class="name">Quality</span>
+              <input
+                type="range"
+                min="0"
+                max={MAX_QUALITY}
+                step="1"
+                value={app.quality}
+                aria-valuetext={QUALITY[app.quality].label}
+                oninput={(e) => app.setQuality(e.currentTarget.valueAsNumber)}
+              />
+              <span class="value">{QUALITY[app.quality].label}</span>
+            </label>
+            <label class="row" title="Frame rate counter in the corner (F)">
+              <span class="name">Frame rate</span>
+              <input type="checkbox" checked={app.showFps} onchange={() => app.toggleFps()} />
+            </label>
+          </div>
         </div>
       {/if}
     </div>
@@ -274,6 +295,50 @@
   }
   .menu .danger {
     color: var(--red);
+  }
+  .settings {
+    margin-top: 6px;
+    padding: 8px 10px 4px;
+    border-top: 1.5px solid var(--line);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .settings .heading {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ink-soft);
+  }
+  .settings .row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 15px;
+    color: var(--ink);
+    cursor: pointer;
+  }
+  .settings .name {
+    flex: 1;
+  }
+  .settings input[type='range'] {
+    width: 84px;
+    margin: 0;
+    accent-color: var(--green);
+    cursor: pointer;
+  }
+  .settings input[type='checkbox'] {
+    width: 18px;
+    height: 18px;
+    margin: 0;
+    accent-color: var(--green);
+    cursor: pointer;
+  }
+  .settings .value {
+    min-width: 7ch;
+    font-size: 13px;
+    color: var(--ink-soft);
   }
   .menu button:disabled {
     opacity: 0.4;
