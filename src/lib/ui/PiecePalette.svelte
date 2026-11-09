@@ -1,9 +1,9 @@
 <script lang="ts">
   import { app } from '../app.svelte';
-  import { CATALOG, CATEGORIES, type Category } from '../pieces/catalog';
+  import { CATALOG, CATEGORIES, type Tab } from '../pieces/catalog';
   import { thumbs } from './thumbs.svelte';
 
-  let category = $state<Category>('rondins');
+  let category = $state<Tab>('rondins');
 
   const items = $derived.by(() => {
     if (app.mode === 'guide') {
@@ -13,7 +13,7 @@
         .map((d) => ({ def: d, count: app.guide.inventory.get(d.id) ?? 0, needed: needs.get(d.id) ?? 0 }))
         .sort((a, b) => b.needed - a.needed);
     }
-    return CATALOG.filter((d) => d.category === category).map((d) => ({ def: d, count: -1, needed: 0 }));
+    return CATALOG.filter((d) => (category === 'medieval' ? d.medieval : d.category === category)).map((d) => ({ def: d, count: -1, needed: 0 }));
   });
 </script>
 

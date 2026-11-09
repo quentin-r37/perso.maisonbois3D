@@ -29,6 +29,8 @@ export interface PieceDef {
   cut?: number;
   /** Same shape as this other piece, only painted another color (black logs and floors). */
   shape?: string;
+  /** Castle piece: also listed in the box's "Medieval" tab. */
+  medieval?: true;
 }
 
 /** Arrow slit, in world units: width of the upright and of the arms of the cross. */
@@ -90,6 +92,7 @@ export const CATALOG: PieceDef[] = [
   {
     ...base,
     id: 'medium-dark',
+    medieval: true,
     shape: 'medium',
     name: 'Dark medium log',
     kind: 'log',
@@ -108,6 +111,7 @@ export const CATALOG: PieceDef[] = [
   {
     ...base,
     id: 'crenel',
+    medieval: true,
     name: 'Crenel log',
     kind: 'log',
     category: 'rondins',
@@ -126,6 +130,7 @@ export const CATALOG: PieceDef[] = [
   {
     ...base,
     id: 'cut-slit',
+    medieval: true,
     name: 'Cut log (slit)',
     kind: 'log',
     category: 'rondins',
@@ -141,6 +146,7 @@ export const CATALOG: PieceDef[] = [
   {
     ...base,
     id: 'cut-wide',
+    medieval: true,
     name: 'Cut log (wide)',
     kind: 'log',
     category: 'rondins',
@@ -182,6 +188,7 @@ export const CATALOG: PieceDef[] = [
   {
     ...base,
     id: 'door-castle',
+    medieval: true,
     name: 'Wooden double door',
     kind: 'insert',
     category: 'ouvertures',
@@ -193,6 +200,7 @@ export const CATALOG: PieceDef[] = [
   {
     ...base,
     id: 'grille',
+    medieval: true,
     name: 'Window grille',
     kind: 'insert',
     category: 'ouvertures',
@@ -251,6 +259,7 @@ export const CATALOG: PieceDef[] = [
   {
     ...base,
     id: 'floor-dark',
+    medieval: true,
     shape: 'floor',
     name: 'Dark floor',
     kind: 'floor',
@@ -264,6 +273,7 @@ export const CATALOG: PieceDef[] = [
   {
     ...base,
     id: 'floor-half-dark',
+    medieval: true,
     shape: 'floor-half',
     name: 'Dark half floor',
     kind: 'floor',
@@ -277,10 +287,10 @@ export const CATALOG: PieceDef[] = [
   { ...base, id: 'tree', name: 'Fir tree', kind: 'decor', category: 'deco', h: 16, paint: 'green', rotations: 4 },
   { ...base, id: 'figurine', name: 'Little character', kind: 'decor', category: 'deco', h: 10, paint: 'red', rotations: 4 },
   // castle decor: a pennant on a pole planted in a round yellow foot, and a knight with his wooden sword
-  { ...base, id: 'flag', name: 'Flag', kind: 'decor', category: 'deco', h: 29, paint: 'purple', rotations: 4 },
-  { ...base, id: 'knight', name: 'Knight', kind: 'decor', category: 'deco', h: 11, paint: 'grey', rotations: 4 },
+  { ...base, medieval: true, id: 'flag', name: 'Flag', kind: 'decor', category: 'deco', h: 29, paint: 'purple', rotations: 4 },
+  { ...base, medieval: true, id: 'knight', name: 'Knight', kind: 'decor', category: 'deco', h: 11, paint: 'grey', rotations: 4 },
   // second knight: crown, auburn hair, red collar, a battle axe
-  { ...base, id: 'knight-crown', name: 'Crowned knight', kind: 'decor', category: 'deco', h: 12, paint: 'grey', rotations: 4 }
+  { ...base, medieval: true, id: 'knight-crown', name: 'Crowned knight', kind: 'decor', category: 'deco', h: 12, paint: 'grey', rotations: 4 }
 ];
 
 const BY_ID = new Map(CATALOG.map((d) => [d.id, d]));
@@ -302,9 +312,13 @@ export function hasDef(id: string): boolean {
 
 export const isRoofKind = (k: Kind) => k === 'batten' || k === 'roof' || k === 'ridge' || k === 'chimney';
 
-export const CATEGORIES: { id: Category; label: string }[] = [
+/** A box tab: a category, or the "Medieval" tab gathering the castle pieces of every category. */
+export type Tab = Category | 'medieval';
+
+export const CATEGORIES: { id: Tab; label: string }[] = [
   { id: 'rondins', label: 'Logs' },
   { id: 'ouvertures', label: 'Doors & windows' },
   { id: 'toit', label: 'Roof & floor' },
-  { id: 'deco', label: 'Decor' }
+  { id: 'deco', label: 'Decor' },
+  { id: 'medieval', label: 'Medieval' }
 ];

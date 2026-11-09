@@ -18,7 +18,7 @@ describe('piece catalogue', () => {
     const copies = CATALOG.filter((d) => d.shape);
     expect(copies.map((d) => d.id)).toEqual(['medium-dark', 'floor-dark', 'floor-half-dark']);
     for (const d of copies) {
-      const { id, name, paint, shape, ...rest } = d;
+      const { id, name, paint, shape, medieval: _m, ...rest } = d;
       const { id: _i, name: _n, paint: _p, ...base } = CATALOG.find((b) => b.id === shape)!;
       expect(rest).toEqual(base);
       expect(worldBoxes({ type: id, ix: 0, iz: 0, y: 0, axis: 'x' }).map(({ piece, ...b }) => b)).toEqual(
