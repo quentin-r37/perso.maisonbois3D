@@ -3,11 +3,13 @@
   import { sanitizeSpecs } from '../build/store.svelte';
   import { getDef } from '../pieces/catalog';
   import Icon from './Icon.svelte';
+  import NoticeDialog from './NoticeDialog.svelte';
   import { EFFECTS } from './demolition';
   import { MAX_QUALITY, QUALITY } from './quality';
 
   let menuOpen = $state(false);
   let confirmClear = $state(false);
+  let noticeOpen = $state(false);
   let fileInput: HTMLInputElement;
 
   const demo = $derived(app.demo.active);
@@ -135,6 +137,16 @@
         <div class="menu" role="menu">
           <button role="menuitem" onclick={() => ((app.helpOpen = true), (menuOpen = false))}><Icon name="help" size={18} /> Help</button>
           <button role="menuitem" disabled={demo} onclick={exportFile}><Icon name="download" size={18} /> Export (JSON)</button>
+          {#if app.mode === 'libre'}
+            <button
+              role="menuitem"
+              disabled={demo || !app.sandbox.pieces.length}
+              title="A printable booklet of your build, step by step"
+              onclick={() => ((noticeOpen = true), (menuOpen = false))}
+            >
+              <Icon name="book" size={18} /> Building instructions (PDF)
+            </button>
+          {/if}
           <button role="menuitem" disabled={demo} onclick={() => fileInput.click()}><Icon name="upload" size={18} /> Import…</button>
           <button role="menuitem" class="danger" disabled={demo} onclick={clearAll}>
             <Icon name="trash" size={18} />
@@ -166,6 +178,10 @@
   </div>
   <input bind:this={fileInput} type="file" accept="application/json,.json" hidden onchange={importFile} />
 </div>
+
+{#if noticeOpen}
+  <NoticeDialog onclose={() => (noticeOpen = false)} />
+{/if}
 
 <style>
   .bar {

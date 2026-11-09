@@ -16,7 +16,7 @@ import type { PieceSpec } from '../build/grid';
 import { getGeometry } from './geometry';
 import { materialsFor } from './materials';
 
-function makeRenderer(width: number, height: number): WebGLRenderer | null {
+export function makeRenderer(width: number, height: number): WebGLRenderer | null {
   let renderer: WebGLRenderer;
   try {
     renderer = new WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
@@ -30,7 +30,7 @@ function makeRenderer(width: number, height: number): WebGLRenderer | null {
   return renderer;
 }
 
-function makeScene(): Scene {
+export function makeScene(): Scene {
   const scene = new Scene();
   scene.add(new AmbientLight(0xffffff, 1.4));
   const sun = new DirectionalLight(0xfff2dd, 2.6);
@@ -40,7 +40,7 @@ function makeScene(): Scene {
 }
 
 /** Frames the object in the camera, seen from `dir` (slightly above). */
-function frame(camera: PerspectiveCamera, obj: Mesh | Group, dir: Vector3, fill: number) {
+export function frame(camera: PerspectiveCamera, obj: Mesh | Group, dir: Vector3, fill: number) {
   const box = new Box3().setFromObject(obj);
   const center = box.getCenter(new Vector3());
   const radius = box.getSize(new Vector3()).length() / 2;

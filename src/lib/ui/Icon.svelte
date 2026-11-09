@@ -20,7 +20,8 @@
     | 'blast'
     | 'tornado'
     | 'quake'
-    | 'house';
+    | 'house'
+    | 'book';
   let { name, size = 20 }: { name: Name; size?: number } = $props();
 </script>
 
@@ -67,5 +68,7 @@
     <path d="M2 12h3.5l2-6 3.5 12 3-9 2 5 1.5-2H22" />
   {:else if name === 'house'}
     <path d="M3 11 12 3.5 21 11" /><path d="M5.5 9v11h13V9" /><path d="M10 20v-5h4v5" />
+  {:else if name === 'book'}
+    <path d="M12 7C10 5.500 8 5 3 5v13c5 0 7 .5 9 2 2-1.500 4-2 9-2V5c-5 0-7 .5-9 2z" /><path d="M12 7v13" />
   {/if}
 </svg>

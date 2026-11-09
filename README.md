@@ -14,7 +14,8 @@ npm run build
 ```
 
 ## Modes
-- **Free build**: unlimited pieces, saved automatically (localStorage), JSON export/import.
+- **Free build**: unlimited pieces, saved automatically (localStorage), JSON export/import,
+  and **building instructions** of your own build as a printable PDF (cover, parts list, one picture per step).
 - **Booklet**: a model to follow step by step (blue outlines, "Show me", kit inventory).
 
 ## Structure
