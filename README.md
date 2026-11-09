@@ -3,6 +3,8 @@
 Build log chalets in the browser, like the wooden notched-log construction toys.
 Svelte 5 + Threlte 8 + three.js. No assets: geometries, wood textures and sounds are all procedural.
 
+**Live demo:** https://quentin-r37.github.io/perso.maisonbois3D/
+
 ```bash
 npm install
 npm run dev      # http://localhost:5173
