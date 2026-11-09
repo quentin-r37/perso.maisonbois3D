@@ -1,4 +1,4 @@
-import { getDef, isRoofKind } from '../pieces/catalog';
+import { getDef, isRoofKind, shapeOf } from '../pieces/catalog';
 import { FLOOR_MARGIN, G, LOG_W, OVERHANG, Q, floorNotchZ, halfFloorEndZ, type PieceSpec } from './grid';
 import { GABLE_C, GABLE_T, gableHeight } from './roof';
 
@@ -139,7 +139,7 @@ export function localBoxes(type: string, upside = false): LocalBox[] {
       // its front edge stops against the front log (it sits inside the frame, not on top of it)
       const L = def.length * G;
       const m = FLOOR_MARGIN;
-      if (type === 'floor-half') {
+      if (shapeOf(type) === 'floor-half') {
         // notched front corners (around the heads of the corner logs), ends in the middle of the room
         b = [
           { x0: W2, x1: L - W2, z0: W2, z1: OVERHANG, y0: 0, y1: def.h },

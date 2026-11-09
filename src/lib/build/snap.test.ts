@@ -10,8 +10,21 @@ const drop = (pieces: PieceSpec[], spec: Omit<PieceSpec, 'y'>) =>
 
 describe('piece catalogue', () => {
   it('only three kinds of plain logs: small, medium, long', () => {
-    const plain = CATALOG.filter((d) => d.kind === 'log' && !d.teeth && d.cut === undefined);
+    const plain = CATALOG.filter((d) => d.kind === 'log' && !d.teeth && d.cut === undefined && !d.shape);
     expect(plain.map((d) => d.id)).toEqual(['small', 'medium', 'long']);
+  });
+
+  it('dark pieces are stained copies: same shape and size as the piece they copy', () => {
+    const copies = CATALOG.filter((d) => d.shape);
+    expect(copies.map((d) => d.id)).toEqual(['medium-dark', 'floor-dark', 'floor-half-dark']);
+    for (const d of copies) {
+      const { id, name, paint, shape, ...rest } = d;
+      const { id: _i, name: _n, paint: _p, ...base } = CATALOG.find((b) => b.id === shape)!;
+      expect(rest).toEqual(base);
+      expect(worldBoxes({ type: id, ix: 0, iz: 0, y: 0, axis: 'x' }).map(({ piece, ...b }) => b)).toEqual(
+        worldBoxes({ type: shape!, ix: 0, iz: 0, y: 0, axis: 'x' }).map(({ piece, ...b }) => b)
+      );
+    }
   });
 
   it('castle: one crenel log, two cut logs for the arrow slit', () => {

@@ -1,7 +1,7 @@
 import { G } from '../build/grid';
 
 export type Kind = 'log' | 'insert' | 'gable' | 'floor' | 'decor' | 'batten' | 'roof' | 'ridge' | 'chimney';
-export type Paint = 'wood' | 'black' | 'light' | 'orange' | 'white' | 'green' | 'red' | 'yellow' | 'dark' | 'blue' | 'skin' | 'hair' | 'grey' | 'purple' | 'slate' | 'auburn';
+export type Paint = 'wood' | 'black' | 'light' | 'orange' | 'white' | 'green' | 'red' | 'yellow' | 'dark' | 'blue' | 'skin' | 'hair' | 'grey' | 'purple' | 'slate' | 'auburn' | 'iron';
 export type Category = 'rondins' | 'ouvertures' | 'toit' | 'deco';
 
 export interface PieceDef {
@@ -27,6 +27,8 @@ export interface PieceDef {
   teeth?: number;
   /** Cut log (arrow slit): local x (world units) of its flat, sawn end. */
   cut?: number;
+  /** Same shape as this other piece, only painted another color (black logs and floors). */
+  shape?: string;
 }
 
 /** Arrow slit, in world units: width of the upright and of the arms of the cross. */
@@ -83,6 +85,22 @@ export const CATALOG: PieceDef[] = [
     bottomNotch: 1,
     paint: 'wood',
     rotations: 4
+  },
+  // Medieval: the very same medium log, painted black like the crenel log.
+  {
+    ...base,
+    id: 'medium-dark',
+    shape: 'medium',
+    name: 'Dark medium log',
+    kind: 'log',
+    category: 'rondins',
+    length: 5,
+    notches: [0, 5],
+    h: 4,
+    topNotch: 1,
+    bottomNotch: 1,
+    paint: 'black',
+    rotations: 2
   },
   // Castle. The crenel log is nothing more than a medium log with three more notches cut
   // in its top (standard notches, no deeper), evenly spaced between the corners.
@@ -159,6 +177,30 @@ export const CATALOG: PieceDef[] = [
     paint: 'red',
     rotations: 4
   },
+  // Medieval openings, same size as the door and the window: a double door of wooden
+  // planks held by iron straps, and an iron grille, their frames painted black like the crenel log.
+  {
+    ...base,
+    id: 'door-castle',
+    name: 'Wooden double door',
+    kind: 'insert',
+    category: 'ouvertures',
+    length: 3,
+    h: 24,
+    paint: 'wood',
+    rotations: 4
+  },
+  {
+    ...base,
+    id: 'grille',
+    name: 'Window grille',
+    kind: 'insert',
+    category: 'ouvertures',
+    length: 3,
+    h: 16,
+    paint: 'iron',
+    rotations: 4
+  },
   {
     ...base,
     id: 'gable',
@@ -205,6 +247,33 @@ export const CATALOG: PieceDef[] = [
     paint: 'green',
     rotations: 4
   },
+  // the same two floors, painted black like the crenel log (medieval)
+  {
+    ...base,
+    id: 'floor-dark',
+    shape: 'floor',
+    name: 'Dark floor',
+    kind: 'floor',
+    category: 'toit',
+    length: 5,
+    depth: 2,
+    h: 1,
+    paint: 'black',
+    rotations: 4
+  },
+  {
+    ...base,
+    id: 'floor-half-dark',
+    shape: 'floor-half',
+    name: 'Dark half floor',
+    kind: 'floor',
+    category: 'toit',
+    length: 5,
+    depth: 5,
+    h: 1,
+    paint: 'black',
+    rotations: 4
+  },
   { ...base, id: 'tree', name: 'Fir tree', kind: 'decor', category: 'deco', h: 16, paint: 'green', rotations: 4 },
   { ...base, id: 'figurine', name: 'Little character', kind: 'decor', category: 'deco', h: 10, paint: 'red', rotations: 4 },
   // castle decor: a pennant on a pole planted in a round yellow foot, and a knight with his wooden sword
@@ -220,6 +289,11 @@ export function getDef(id: string): PieceDef {
   const d = BY_ID.get(id);
   if (!d) throw new Error(`Unknown piece: ${id}`);
   return d;
+}
+
+/** Id of the piece whose shape this one has (itself, or the piece it is a stained copy of). */
+export function shapeOf(id: string): string {
+  return getDef(id).shape ?? id;
 }
 
 export function hasDef(id: string): boolean {

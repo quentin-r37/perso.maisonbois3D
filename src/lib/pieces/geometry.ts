@@ -9,13 +9,14 @@ import {
   Path,
   Shape,
   SphereGeometry,
+  TorusGeometry,
   Euler,
   Quaternion,
   Vector3
 } from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { getDef, type Paint } from './catalog';
+import { getDef, shapeOf, type Paint } from './catalog';
 import { FLOOR_MARGIN, G, LOG_W, OVERHANG, Q, floorNotchZ, halfFloorEndZ, type PieceSpec } from '../build/grid';
 import { isUpsideDown, localBoxes } from '../build/volumes';
 import {
@@ -327,6 +328,97 @@ function doorParts(L: number, hq: number): Part[] {
   return parts;
 }
 
+/** Moves parts built in their own frame (a leaf) to their place. */
+function moved(parts: Part[], m: Matrix4): Part[] {
+  for (const p of parts) p.geo.applyMatrix4(m);
+  return parts;
+}
+
+/**
+ * Medieval leaf, built from its hinge (x from 0 toward `dir`, face toward +z, back at z = 0):
+ * vertical wooden planks, three wrought-iron straps, a ring handle near the meeting edge.
+ */
+function plankLeaf(w: number, h: number, t: number, dir: 1 | -1): Part[] {
+  const parts: Part[] = [];
+  const n = 4;
+  const gap = 0.012;
+  const pw = (w - gap * (n - 1)) / n;
+  for (let k = 0; k < n; k++) {
+    const a = k * (pw + gap);
+    const [x0, x1] = dir > 0 ? [a, a + pw] : [-a - pw, -a];
+    parts.push(rbox(x0, x1, 0, h, 0, t, 'wood', 0.012));
+  }
+  const s0 = dir > 0 ? 0.03 : -w + 0.09;
+  const s1 = dir > 0 ? w - 0.09 : -0.03;
+  for (const y of [0.22, h / 2, h - 0.26]) parts.push(rbox(s0, s1, y - 0.04, y + 0.04, t - 0.004, t + 0.016, 'iron', 0.008));
+  // ring handle on a small plate, near the meeting edge
+  const hx = dir * (w - 0.16);
+  const hy = h * 0.47;
+  parts.push(rbox(hx - 0.045, hx + 0.045, hy - 0.045, hy + 0.045, t - 0.004, t + 0.014, 'iron', 0.01));
+  parts.push({ geo: finalize(new TorusGeometry(0.055, 0.011, 8, 20), mat([hx, hy - 0.05, t + 0.026]), false), paint: 'iron' });
+  return parts;
+}
+
+/** Wooden double door: black frame and lintel (crenel paint), plank leaves (the left one ajar). */
+function castleDoorParts(L: number, hq: number): Part[] {
+  const H = hq * Q;
+  const x0 = FRAME_X0;
+  const x1 = L * G - FRAME_X0;
+  const d = LOG_W * 1.1;
+  const lintel = 0.16;
+  const parts: Part[] = [
+    // the posts also fill the empty notches of the neighboring logs
+    rbox(x0 - JAMB, x0 + POST, 0, H - lintel, -d / 2, d / 2, 'black'),
+    rbox(x1 - POST, x1 + JAMB, 0, H - lintel, -d / 2, d / 2, 'black'),
+    rbox(x0 - JAMB, x1 + JAMB, H - lintel, H, -d / 2 - 0.02, d / 2 + 0.02, 'black'),
+    rbox(x0 + POST, x1 - POST, 0, 0.04, -d / 2, d / 2, 'black', 0.015)
+  ];
+  const inner0 = x0 + POST;
+  const inner1 = x1 - POST;
+  const lw = (inner1 - inner0) / 2 - 0.006;
+  const lh = H - lintel - 0.06;
+  const t = 0.06;
+  const hingeZ = d / 2 - t - 0.012;
+  const openL = 0.55;
+  parts.push(
+    ...moved(plankLeaf(lw, lh, t, 1), mat([inner0, 0.045, hingeZ], [0, -openL, 0])),
+    ...moved(plankLeaf(lw, lh, t, -1), mat([inner1, 0.045, hingeZ]))
+  );
+  // big hinge pins on the frame
+  for (const x of [inner0, inner1])
+    for (const y of [0.267, 0.045 + lh / 2, 0.045 + lh - 0.26])
+      parts.push({ geo: finalize(new CylinderGeometry(0.022, 0.022, 0.1, 12), mat([x, y, hingeZ + t + 0.01]), false), paint: 'iron' });
+  return parts;
+}
+
+/** Window-sized grille: black frame (crenel paint), round iron bars held by two flat crossbars. */
+function grilleParts(L: number, hq: number): Part[] {
+  const H = hq * Q;
+  const x0 = FRAME_X0;
+  const x1 = L * G - FRAME_X0;
+  const d = LOG_W * 1.05;
+  const parts: Part[] = [
+    rbox(x0 - JAMB, x1 + JAMB, 0, 0.1, -d / 2 - 0.03, d / 2 + 0.03, 'black'),
+    rbox(x0 - JAMB, x1 + JAMB, H - 0.1, H, -d / 2, d / 2, 'black'),
+    rbox(x0 - JAMB, x0 + POST, 0.1, H - 0.1, -d / 2, d / 2, 'black'),
+    rbox(x1 - POST, x1 + JAMB, 0.1, H - 0.1, -d / 2, d / 2, 'black')
+  ];
+  const i0 = x0 + POST;
+  const i1 = x1 - POST;
+  const j0 = 0.1;
+  const j1 = H - 0.1;
+  const n = 5;
+  for (let k = 1; k <= n; k++) {
+    const x = i0 + ((i1 - i0) * k) / (n + 1);
+    parts.push({ geo: finalize(new CylinderGeometry(0.026, 0.026, j1 - j0, 12), mat([x, (j0 + j1) / 2, 0]), false), paint: 'iron' });
+  }
+  for (let j = 1; j < 3; j++) {
+    const y = j0 + ((j1 - j0) * j) / 3;
+    parts.push(rbox(i0, i1, y - 0.035, y + 0.035, -0.04, 0.04, 'iron', 0.008));
+  }
+  return parts;
+}
+
 function windowParts(L: number, hq: number): Part[] {
   const H = hq * Q;
   const x0 = FRAME_X0;
@@ -518,7 +610,7 @@ function chimneyParts(W: number): Part[] {
 // Floor & decor
 // ---------------------------------------------------------------------------
 
-function floorParts(L: number, D: number): Part[] {
+function floorParts(L: number, D: number, paint: Paint): Part[] {
   // single green board, with notches at the back corners to fit around the heads
   // of the corner logs; front edge against the front log, which runs in front of it
   // (same outline as its collision boxes in volumes.ts)
@@ -539,10 +631,10 @@ function floorParts(L: number, D: number): Part[] {
   s.lineTo(x0, zn);
   s.closePath();
   // rotation +90° around X: shape y → world +z, thickness along y
-  return [extrude(s, Q, 'green', mat([0, Q / 2, 0], [Math.PI / 2, 0, 0]), 0.015)];
+  return [extrude(s, Q, paint, mat([0, Q / 2, 0], [Math.PI / 2, 0, 0]), 0.015)];
 }
 
-function halfFloorParts(L: number, D: number): Part[] {
+function halfFloorParts(L: number, D: number, paint: Paint): Part[] {
   // front half of a 5 × 5 room: notched front corners, straight edge in the middle of the room
   // (same outline as its collision boxes in volumes.ts)
   const w = LOG_W / 2;
@@ -559,7 +651,7 @@ function halfFloorParts(L: number, D: number): Part[] {
   s.lineTo(x0, OVERHANG);
   s.lineTo(w, OVERHANG);
   s.closePath();
-  return [extrude(s, Q, 'green', mat([0, Q / 2, 0], [Math.PI / 2, 0, 0]), 0.015)];
+  return [extrude(s, Q, paint, mat([0, Q / 2, 0], [Math.PI / 2, 0, 0]), 0.015)];
 }
 
 function treeParts(): Part[] {
@@ -776,6 +868,12 @@ function crownedKnightParts(): Part[] {
 
 // ---------------------------------------------------------------------------
 
+const INSERTS: Record<string, (L: number, hq: number) => Part[]> = {
+  door: doorParts,
+  'door-castle': castleDoorParts,
+  grille: grilleParts
+};
+
 const cache = new Map<string, PieceGeometry>();
 
 type GeoSpec = Pick<PieceSpec, 'type' | 'param' | 'param2' | 'side' | 'slot'>;
@@ -806,11 +904,13 @@ export function getGeometry(spec: GeoSpec): PieceGeometry {
     case 'log':
       if (def.cut !== undefined) parts = cutLogParts(def.cut, def.h, def.topNotch, def.bottomNotch, def.paint);
       else if (def.teeth) parts = crenelParts(def.paint, spec.type, isUpsideDown(spec));
-      else parts = logParts(def.notches ?? [0], def.h, def.topNotch, def.bottomNotch);
+      else parts = logParts(def.notches ?? [0], def.h, def.topNotch, def.bottomNotch, def.paint);
       break;
-    case 'insert':
-      parts = spec.type === 'door' ? doorParts(def.length, def.h) : windowParts(def.length, def.h);
+    case 'insert': {
+      const build = INSERTS[shapeOf(spec.type)] ?? windowParts;
+      parts = build(def.length, def.h);
       break;
+    }
     case 'gable':
       parts = gableParts(def.length);
       break;
@@ -827,7 +927,10 @@ export function getGeometry(spec: GeoSpec): PieceGeometry {
       parts = chimneyParts(spec.param ?? 5);
       break;
     case 'floor':
-      parts = spec.type === 'floor-half' ? halfFloorParts(def.length, def.depth) : floorParts(def.length, def.depth);
+      parts =
+        shapeOf(spec.type) === 'floor-half'
+          ? halfFloorParts(def.length, def.depth, def.paint)
+          : floorParts(def.length, def.depth, def.paint);
       break;
     case 'decor':
       parts =

@@ -84,7 +84,9 @@ const PAINT_COLORS: Record<Paint, string> = {
   purple: '#5b4fa0',
   // the crowned knight's arms and legs, his hair
   slate: '#4a5568',
-  auburn: '#8e3b22'
+  auburn: '#8e3b22',
+  // medieval pieces: wrought iron (door straps, grille bars)
+  iron: '#3b3c40'
 };
 
 const WOOD_TINTS = ['#dca46a', '#d29a5f', '#e1ad76'];
@@ -97,15 +99,16 @@ function make(paint: Paint, variant = 0): Material {
   if (m) return m;
   const painted = paint !== 'wood' && paint !== 'dark' && paint !== 'light';
   const plastic = paint === 'white';
+  const metal = paint === 'iron';
   const color = paint === 'wood' ? WOOD_TINTS[variant % WOOD_TINTS.length] : PAINT_COLORS[paint];
-  const useGrain = paint !== 'skin' && paint !== 'blue' && paint !== 'hair' && paint !== 'purple' && !plastic;
+  const useGrain = paint !== 'skin' && paint !== 'blue' && paint !== 'hair' && paint !== 'purple' && !plastic && !metal;
   m = new MeshStandardMaterial({
     color: new Color(color),
     map: isBrowser && useGrain ? grainTexture() : null,
     bumpMap: isBrowser && useGrain ? grainTexture() : null,
     bumpScale: painted ? 0.4 : 1.2,
-    roughness: plastic ? 0.35 : painted ? 0.5 : 0.72,
-    metalness: 0
+    roughness: plastic ? 0.35 : metal ? 0.45 : painted ? 0.5 : 0.72,
+    metalness: metal ? 0.35 : 0
   });
   cache.set(key, m);
   return m;
