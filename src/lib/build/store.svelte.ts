@@ -40,6 +40,12 @@ export function sanitizeSpecs(data: unknown): PieceSpec[] {
     .map(normalize);
 }
 
+/**
+ * Shared by every build: the scene keys the piece components by uid, and switching between
+ * the sandbox and the booklet must not hand the component of one piece to another one.
+ */
+let nextUid = 1;
+
 /** A build: list of placed pieces + undo/redo history. */
 export class BuildStore {
   pieces = $state.raw<PlacedPiece[]>([]);
@@ -58,14 +64,13 @@ export class BuildStore {
 
   /** Pieces that should play the drop animation when they appear. */
   fresh = new Set<number>();
-  #uid = 1;
   readonly storageKey: string | null;
 
   constructor(storageKey: string | null = null) {
     this.storageKey = storageKey;
     if (storageKey) {
       const specs = sanitizeSpecs(readStorage(storageKey));
-      this.pieces = specs.map((s) => ({ ...s, uid: this.#uid++ }));
+      this.pieces = specs.map((s) => ({ ...s, uid: nextUid++ }));
     }
   }
 
@@ -94,7 +99,7 @@ export class BuildStore {
   }
 
   add(spec: PieceSpec, animate = true): PlacedPiece {
-    const piece: PlacedPiece = { ...normalize(spec), uid: this.#uid++ };
+    const piece: PlacedPiece = { ...normalize(spec), uid: nextUid++ };
     const action: Action = { kind: 'add', pieces: [piece] };
     this.#apply(action, false, animate);
     this.#record(action);
@@ -122,7 +127,7 @@ export class BuildStore {
     this.#redo = [];
     this.fresh.clear();
     this.pieces = specs.map((s) => {
-      const p = { ...normalize(s), uid: this.#uid++ };
+      const p = { ...normalize(s), uid: nextUid++ };
       if (animate) this.fresh.add(p.uid);
       return p;
     });

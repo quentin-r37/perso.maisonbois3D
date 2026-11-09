@@ -13,6 +13,7 @@
   import { emit, kick, resetFx, slowmo, timeScale } from '../destroy/fx';
   import { chime } from '../audio/sfx';
   import * as sfx from '../audio/demolition';
+  import { refreshShadows } from './shadows';
 
   /**
    * Stand-ins for the pieces during a demolition: same meshes, driven by the physics
@@ -258,6 +259,8 @@
 
   useTask((delta) => {
     const dt = Math.min(delta, 1 / 20);
+    // the debris move on every frame
+    refreshShadows();
     if (app.demo.phase === 'rebuilding') {
       stepRewind(dt);
       return;

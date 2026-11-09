@@ -7,6 +7,7 @@
   import { getOpenableGeometry, getGeometry } from '../pieces/geometry';
   import { materialsFor } from '../pieces/materials';
   import { clack } from '../audio/sfx';
+  import { refreshShadows } from './shadows';
 
   interface Props {
     piece: PlacedPiece;
@@ -83,6 +84,15 @@
     },
     { autoStart: false }
   );
+
+  // the piece moved (falling, leaves swinging, put somewhere else): its shadow follows
+  $effect(() => {
+    void offset;
+    void leafAngles;
+    void t;
+    void hidden;
+    refreshShadows();
+  });
 
   onMount(() => {
     if (shouldAnimate) {

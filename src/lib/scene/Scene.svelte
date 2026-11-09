@@ -18,6 +18,7 @@
   import DemolitionFx from './DemolitionFx.svelte';
   import { fx } from '../destroy/fx';
   import { countFrame } from '../ui/fps.svelte';
+  import { manualShadows, refreshShadows } from './shadows';
 
   const { scene, renderer, renderStage, invalidate } = useThrelte();
 
@@ -31,6 +32,8 @@
   scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
   scene.environmentIntensity = 0.45;
   pmrem.dispose();
+
+  manualShadows(renderer);
 
   const build = $derived(app.build);
   const target = $derived<[number, number, number]>(app.mode === 'guide' ? app.guide.model.center : [1.5, 0.8, 1.5]);
@@ -58,7 +61,16 @@
     // the map is created at its size once: drop it, three makes a new one on the next frame
     sun.shadow.map?.dispose();
     sun.shadow.map = null;
+    refreshShadows();
     invalidate();
+  });
+  // pieces added / removed / hidden, quality changed: the shadows are redrawn
+  // (the pieces that move — falling, doors, debris — ask for it themselves)
+  $effect(() => {
+    void build.pieces;
+    void app.demo.active;
+    void app.quality;
+    refreshShadows();
   });
 
   // explosion flash: the ambient light flares up (adding a light would recompile every shader)
@@ -76,6 +88,7 @@
         if (world.position.lengthSq() || world.rotation.z) {
           world.position.set(0, 0, 0);
           world.rotation.set(0, 0, 0);
+          refreshShadows();
         }
         return;
       }
@@ -83,6 +96,7 @@
       world.position.set(r() * s * 0.28, r() * s * 0.14, r() * s * 0.28);
       world.rotation.set(r() * s * 0.012, 0, r() * s * 0.012);
       fx.shake = s * Math.exp(-Math.min(delta, 0.05) * 4.5);
+      refreshShadows();
     },
     { autoInvalidate: false }
   );

@@ -39,10 +39,18 @@
     variant === 'ok' ? GHOST_OK : variant === 'loose' ? GHOST_LOOSE : variant === 'bad' ? GHOST_BAD : BLUEPRINT
   );
 
-  let time = 0;
-  useTask((delta) => {
-    time += delta;
-    if (variant === 'blueprint') BLUEPRINT.opacity = 0.18 + 0.14 * (0.5 + 0.5 * Math.sin(time * 3.2));
+  // Only the blue outlines pulse (and keep the scene rendering); the ghost under the cursor
+  // is redrawn when it moves, not on every frame. One clock for all the outlines: they
+  // share the material.
+  const pulse = useTask(
+    () => {
+      BLUEPRINT.opacity = 0.18 + 0.14 * (0.5 + 0.5 * Math.sin((performance.now() / 1000) * 3.2));
+    },
+    { autoStart: false }
+  );
+  $effect(() => {
+    if (variant === 'blueprint') pulse.start();
+    else pulse.stop();
   });
 </script>
 
