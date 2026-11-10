@@ -86,7 +86,14 @@ export function bus(c: BaseAudioContext): Bus {
   muffle.frequency.value = 20000;
   muffle.Q.value = 0.8;
   const input = c.createGain();
-  input.connect(muffle).connect(comp).connect(c.destination);
+  // last safety: several explosions on top of each other must not clip (crackling)
+  const limiter = c.createDynamicsCompressor();
+  limiter.threshold.value = -3;
+  limiter.knee.value = 0;
+  limiter.ratio.value = 20;
+  limiter.attack.value = 0.001;
+  limiter.release.value = 0.1;
+  input.connect(muffle).connect(comp).connect(limiter).connect(c.destination);
   const conv = c.createConvolver();
   conv.buffer = impulse(c, 2.4);
   const send = c.createGain();

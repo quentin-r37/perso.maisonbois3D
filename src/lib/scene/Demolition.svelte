@@ -65,6 +65,7 @@
   let stops: sfx.Stop[] = [];
   /** Rumble of the running earthquake (replaced when it's renewed). */
   let stopQuakeSound: sfx.Stop | null = null;
+  let stopWindSound: sfx.Stop | null = null;
 
   /** Friction: pieces rubbing on each other, and on the table. */
   const rubs = { wood: new sfx.Rub('wood'), table: new sfx.Rub('table') };
@@ -152,7 +153,9 @@
       }
       case 'tornado':
         world.addField(tornado(world, 5));
-        stops.push(sfx.wind(5.3));
+        // clicked again: one wind, starting over (several would pile up)
+        stopWindSound?.();
+        stops.push((stopWindSound = sfx.wind(5.3)));
         kick(0.15);
         break;
       case 'quake': {

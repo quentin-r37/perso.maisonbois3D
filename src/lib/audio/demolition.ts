@@ -12,19 +12,63 @@ const rand = (a: number, b: number) => a + Math.random() * (b - a);
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 const tau = 0.0001;
 
-/** Output of a sound: gain → panner → bus, with an optional reverb send. */
-function output(c: BaseAudioContext, gain: number, pan = 0, send = 0): GainNode {
+// ---------------------------------------------------------------------------
+// Voice budget: a tornado on a pile of loose pieces is hundreds of hits per second.
+// Without a limit, thousands of audio nodes get created per second: the audio thread
+// can't keep up (crackling), then goes silent.
+
+interface Voice {
+  start: number;
+  end: number;
+  /** Roughly how many sources (oscillators, noises) it plays. */
+  cost: number;
+  /** What plugs it into the bus. */
+  plugs: AudioNode[];
+}
+const voices = new WeakMap<BaseAudioContext, Voice[]>();
+/** Above this, soft hits and splinters are dropped. */
+const BUSY = 100;
+/** Above this, no more hits at all. */
+const FULL = 200;
+
+/** Sources sounding right now. What is over gets unplugged from the bus. */
+function load(c: BaseAudioContext): number {
+  const list = voices.get(c);
+  if (!list) return 0;
+  const now = c.currentTime;
+  let n = 0;
+  let keep = 0;
+  for (const v of list) {
+    if (v.end > now) {
+      list[keep++] = v;
+      if (v.start <= now) n += v.cost;
+    } else for (const p of v.plugs) p.disconnect();
+  }
+  list.length = keep;
+  return n;
+}
+
+/**
+ * Output of a sound: gain → panner → bus, with an optional reverb send.
+ * `end`: time at which the sound is over (it is unplugged then); `cost`: its number of sources.
+ */
+function output(c: BaseAudioContext, gain: number, pan: number, send: number, end: number, cost = 1, start = c.currentTime): GainNode {
   const b = bus(c);
   const g = c.createGain();
   g.gain.value = gain;
   const p = c.createStereoPanner();
   p.pan.value = clamp(pan, -1, 1);
   g.connect(p).connect(b.input);
+  const plugs: AudioNode[] = [p];
   if (send > 0) {
     const s = c.createGain();
     s.gain.value = send;
     p.connect(s).connect(b.send);
+    plugs.push(s);
   }
+  let list = voices.get(c);
+  if (!list) voices.set(c, (list = []));
+  list.push({ start, end: end + 0.1, cost, plugs });
   return g;
 }
 
@@ -106,6 +150,8 @@ function drive(c: BaseAudioContext, k: number): WaveShaperNode {
 
 /** Times of the last hits, per audio context (limiter). */
 const recentHits = new WeakMap<BaseAudioContext, number[]>();
+/** Time of the last hit that cracked the wood, per audio context. */
+const lastCrack = new WeakMap<BaseAudioContext, number>();
 
 export interface ImpactSound {
   /** Speed at which the two met (m/s): 0.3 = a touch, 2 = a knock, 6+ = a heavy fall. */
@@ -133,6 +179,9 @@ export function impact({ speed, mass, surface = 'wood', pan = 0, dist = 10 }: Im
   recentHits.set(c, recent);
   // no machine gun: at most 8 hits per 100 ms, the soft ones go first
   if (recent.length >= 8 || (recent.length >= 4 && speed < 1.5)) return;
+  // already a lot going on: only the big hits, then nothing more
+  const busy = load(c);
+  if (busy >= FULL || (busy >= BUSY && speed < 3)) return;
   recent.push(now);
 
   const t = now + Math.random() * 0.006;
@@ -142,7 +191,8 @@ export function impact({ speed, mass, surface = 'wood', pan = 0, dist = 10 }: Im
   const far = 1 / (1 + Math.max(0, dist - 7) * 0.06);
 
   // soft blows are dull: the whole voice goes through a low-pass that opens with the speed
-  const out = output(c, 1.5 * loud * far, pan * 0.8, 0.12 + 0.2 * hard);
+  const thump = mass > 0.3 && speed > 2.5;
+  const out = output(c, 1.5 * loud * far, pan * 0.8, 0.12 + 0.2 * hard, t + (thump ? 0.4 : 0.3), thump ? 7 : 6);
   const lp = c.createBiquadFilter();
   lp.type = 'lowpass';
   lp.frequency.value = 700 + 11000 * hard ** 1.4;
@@ -170,7 +220,7 @@ export function impact({ speed, mass, surface = 'wood', pan = 0, dist = 10 }: Im
   // the knock (contact of two hard surfaces): only when it is a real blow
   if (hard > 0.12) burst(c, lp, t, { type: 'bandpass', freq: 1300 + 2600 * hard, q: 1.3, dur: 0.006 + 0.012 * hard, gain: 0.6 * hard });
   // heavy piece, hard fall: a deep thump, felt in the stomach
-  if (mass > 0.3 && speed > 2.5) {
+  if (thump) {
     const k = clamp((speed - 2.5) / 5, 0, 1) * clamp(mass, 0.3, 1.2);
     const o = c.createOscillator();
     o.frequency.setValueAtTime(130 / Math.sqrt(0.5 + mass), t);
@@ -182,7 +232,11 @@ export function impact({ speed, mass, surface = 'wood', pan = 0, dist = 10 }: Im
     o.stop(t + 0.4);
   }
   // the hardest blows: the wood cracks
-  if (speed > 7) splinters(c, t, 2 + Math.round(clamp(speed - 7, 0, 6)), 0.03, 0.25 * far);
+  // (not all of them: in a tornado everything goes that fast)
+  if (speed > 7 && busy < BUSY && now - (lastCrack.get(c) ?? -1) > 0.08) {
+    lastCrack.set(c, now);
+    splinters(c, t, 2 + Math.round(clamp(speed - 7, 0, 6)), 0.03, 0.25 * far);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -292,7 +346,7 @@ export class Rub {
 function splinters(c: BaseAudioContext, t0: number, n: number, spread: number, gain: number) {
   for (let i = 0; i < n; i++) {
     const t = t0 + 0.02 - Math.log(1 - Math.random() * 0.98) * spread;
-    const out = output(c, gain * rand(0.3, 1), rand(-0.85, 0.85), 0.25);
+    const out = output(c, gain * rand(0.3, 1), rand(-0.85, 0.85), 0.25, t + 0.1, 5, t);
     modal(c, out, t, rand(1100, 2900), 0.5, rand(0.025, 0.07));
     burst(c, out, t, { type: 'highpass', freq: rand(2500, 5000), dur: rand(0.006, 0.02), gain: 0.6 });
   }
@@ -311,7 +365,8 @@ export function explosion(power = 1, pan = 0) {
   if (!c) return;
   const t = c.currentTime + 0.005;
   const p = clamp(power, 0.2, 1);
-  const out = output(c, 0.9, pan * 0.6, 0.5);
+  const busy = load(c);
+  const out = output(c, 0.9, pan * 0.6, 0.5, t + 1.2 + 1.3 * p, 5);
 
   // crack
   burst(c, out, t, { type: 'highpass', freq: 1400, dur: 0.05, gain: 0.8 * p, attack: 0.001 });
@@ -349,10 +404,11 @@ export function explosion(power = 1, pan = 0) {
   burst(c, out, t, { type: 'lowpass', freq: 8000, freqEnd: 500, dur: 0.35 + 0.25 * p, gain: 0.35 * p, attack: 0.003 });
 
   // tail: deep rumble, rolling around in the reverb
-  const tail = output(c, 0.7 * p, 0, 0.9);
+  const tail = output(c, 0.7 * p, 0, 0.9, t + 2.3 + 1.8 * p);
   burst(c, tail, t + 0.05, { type: 'lowpass', freq: 110, dur: 2.2 + 1.8 * p, gain: 1, attack: 0.25, noise: 'brown' });
 
-  splinters(c, t, Math.round(8 + 22 * p), 0.08 + 0.2 * p, 0.4);
+  // bombs in a row: the splinters of the previous ones are still raining, fewer new ones
+  splinters(c, t, Math.round((8 + 22 * p) * clamp(1 - busy / FULL, 0.25, 1)), 0.08 + 0.2 * p, 0.4);
 }
 
 /**
@@ -418,7 +474,7 @@ export function wind(dur = 5): Stop {
   const c = ac();
   if (!c) return noop;
   const t = c.currentTime;
-  const master = output(c, 1, 0, 0.35);
+  const master = output(c, 1, 0, 0.35, t + dur + 0.1, 5);
   const level = 0.65;
   master.gain.setValueAtTime(0, t);
   master.gain.linearRampToValueAtTime(level, t + 1.2);
@@ -515,7 +571,7 @@ export function quake(dur = 4): Stop {
   const c = ac();
   if (!c) return noop;
   const t = c.currentTime;
-  const master = output(c, 1, 0, 0.3);
+  const master = output(c, 1, 0, 0.3, t + dur + 0.1, 8);
   const level = 0.32;
   master.gain.setValueAtTime(tau, t);
   master.gain.exponentialRampToValueAtTime(level, t + 0.3);
@@ -575,7 +631,7 @@ export function rewind(dur: number): Stop {
   const c = ac();
   if (!c) return noop;
   const t = c.currentTime;
-  const master = output(c, 0.45, 0, 0.3);
+  const master = output(c, 0.45, 0, 0.3, t + dur + 0.1);
   const g = c.createGain();
   g.gain.setValueAtTime(tau, t);
   g.gain.exponentialRampToValueAtTime(1, t + dur);
@@ -605,7 +661,8 @@ export function snap(progress: number, pan = 0) {
   if (now - lastSnap < 0.045) return;
   lastSnap = now;
   const f = SCALE[Math.min(SCALE.length - 1, Math.floor(clamp(progress, 0, 1) * SCALE.length))];
-  const out = output(c, 0.9, pan * 0.6, 0.25);
+  load(c);
+  const out = output(c, 0.9, pan * 0.6, 0.25, now + 0.2, 5);
   modal(c, out, now, f, 0.8, 0.16);
   burst(c, out, now, { type: 'bandpass', freq: 3000, q: 1.2, dur: 0.01, gain: 0.3 });
 }
